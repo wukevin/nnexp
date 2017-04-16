@@ -73,7 +73,7 @@ def read_biotab(biotab_file, replace_not_available=True):
 
 
 if __name__ == "__main__":
-    DATA_ROOT_DIR = "/Volumes/KWuUSB"
+    DATA_ROOT_DIR = os.getcwd()
     clinical_xmls = get_samples_with_clinical_xml(DATA_ROOT_DIR)
     print "Found %i clinical records" % len(clinical_xmls)
 
