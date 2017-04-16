@@ -1,11 +1,13 @@
+"""
+TCGA downloader
+"""
 import os
 import sys
 import csv
 import argparse
 import multiprocessing
 import subprocess
-
-
+import hashlib
 
 class TcgaDownloader(multiprocessing.Process):
     """Multithreaded TCGA downloader"""
@@ -15,12 +17,36 @@ class TcgaDownloader(multiprocessing.Process):
         self.download = download
         self.basepath = basepath
 
+    def _file_as_blockiter(self, filename, blocksize=65536):
+        """
+        Returns the file as an iterator
+        http://stackoverflow.com/questions/3431825/generating-an-md5-checksum-of-a-file
+        """
+        if not os.path.isfile(filename):
+            raise ValueError("%s does not exist" % filename)
+        # Note that opening with rb is how we get the same output as md5sum
+        with open(filename, 'rb') as handle:
+            block = handle.read(blocksize)
+            while len(block) > 0:
+                yield block
+                block = handle.read(blocksize)
+    
+    def compute_md5(self, filename):
+        """
+        Hash the filename contents
+        """
+        hasher = hashlib.md5() # Create the hasher
+        bytesiter = self._file_as_blockiter(filename)
+        for block in bytesiter: # Update the hasher one block at a time to conserve memory
+            hasher.update(block)
+        return hasher.hexdigest()
+    
     def check_file(self, filepath, md5sum=None):
         """Checks file, returns true if exists and md5sum matches (if provided)"""
         if not os.path.isfile(filepath):
             return False
         if md5sum is not None:
-            checksum = subprocess.check_output(['md5sum', filepath]).split()[0]
+            checksum = self.compute_md5(filepath)
             if checksum != md5sum:
                 return False
         return True
@@ -42,8 +68,8 @@ class TcgaDownloader(multiprocessing.Process):
                 # print "Found: %s" % path_to_check
                 continue
 
-            # File is not found - download it
-            print "NOT found: %s" % path_to_check
+            # File is not found - download it (Not yet inplemented)
+            print("NOT found: %s" % path_to_check)
 
 
 def parse_manifest(manifest):
@@ -62,7 +88,6 @@ def build_parser():
     parser.add_argument("--manifest", required=True, type=str)
     parser.add_argument("--directory", required=False, type=str, default=os.getcwd())
     parser.add_argument("--threads", type=int, default=8)
-    parser.add_argument("--check")
     return parser
 
 
