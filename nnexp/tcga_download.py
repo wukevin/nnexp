@@ -8,6 +8,7 @@ import argparse
 import multiprocessing
 import subprocess
 import hashlib
+import time
 
 class TcgaDownloader(multiprocessing.Process):
     """Multithreaded TCGA downloader"""
@@ -30,7 +31,7 @@ class TcgaDownloader(multiprocessing.Process):
             while len(block) > 0:
                 yield block
                 block = handle.read(blocksize)
-    
+
     def compute_md5(self, filename):
         """
         Hash the filename contents
@@ -40,7 +41,7 @@ class TcgaDownloader(multiprocessing.Process):
         for block in bytesiter: # Update the hasher one block at a time to conserve memory
             hasher.update(block)
         return hasher.hexdigest()
-    
+
     def check_file(self, filepath, md5sum=None):
         """Checks file, returns true if exists and md5sum matches (if provided)"""
         if not os.path.isfile(filepath):
@@ -96,6 +97,7 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
+    start_time = time.time()
     manifest_entries = parse_manifest(args.manifest)
     # Fill the queue with dictionary entries
     queue = multiprocessing.Queue()
@@ -114,6 +116,8 @@ def main():
     # Finish the threads
     for downloader in downloaders:
         downloader.join()
+    
+    print("Checked %i files in %f seconds" % (len(manifest_entries), time.time() - start_time))
 
 if __name__ == "__main__":
     main()
