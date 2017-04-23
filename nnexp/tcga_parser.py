@@ -176,7 +176,7 @@ class TcgaFileFinder(object):
         """
         Returns a dictionary mapping barcode to a dictionary of RNASeqV2 files
         """
-    
+
     def get_protexp_files(self):
         """
         Returns a dictionary mapping barcode to a dictionary of protein expression files

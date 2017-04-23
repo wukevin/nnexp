@@ -37,7 +37,13 @@ def main():
         tcga_parser.MANIFEST_FILE
     )
 
-    # cnv_files = filefinder.get_cnv_files()
+    # Gather all the files
+    cnv_files = filefinder.get_cnv_files()
+    rnaseq_files = filefinder.get_rnaseq_files()
+    protexp_files = filefinder.get_protexp_files()
+
+    # Get the barcodes that have clinical, cnv, rnaseq, and protexp data
+    common_barcodes = [x for x in tcga_objects.keys() if x in cnv_files and x in rnaseq_files and x in protexp_files]
 
 if __name__ == "__main__":
     main()
