@@ -136,6 +136,20 @@ class TcgaFileFinder(object):
         pattern = r"\.tar\.gz"
         return re.sub(pattern, "", os.path.basename(magetab_basename))
 
+    def _get_sampletype_from_site(self, integer_site):
+        """Given an integer representing the site of tumor, return tumor type"""
+        if integer_site < 0:
+            raise ValueError("integer site cannot be negative")
+        elif integer_site < 10:
+            sample_type = "tumor"
+        elif integer_site < 20:
+            sample_type = "normal"
+        elif integer_site < 30:
+            sample_type = "control"
+        else:
+            raise ValueError("%i is not a recognized sample type" % integer_site)
+        return sample_type
+
     def get_cnv_files(self):
         """
         Returns a dictionary mapping barcode to dictionary of cnv files. Only returns cnv files assoc with hg19
@@ -161,14 +175,7 @@ class TcgaFileFinder(object):
                                 detailed_barcode = entry["Comment [TCGA Barcode]"]
                                 detailed_barcode_tokenized = detailed_barcode.split("-")
                                 sample_site = int(detailed_barcode_tokenized[3][:-1])
-                                if sample_site < 10:
-                                    sample_type = "tumor"
-                                elif sample_site < 20:
-                                    sample_type = "normal"
-                                elif sample_site < 30:
-                                    sample_type = "control"
-                                else:
-                                    raise ValueError("%i is not a recognized sample type" % sample_site)
+                                sample_type = self._get_sampletype_from_site(sample_site)
                                 retval[barcode][sample_type] = fullname
         # for barcode, filenames in retval.items():
         #     print(barcode)
@@ -178,7 +185,10 @@ class TcgaFileFinder(object):
 
     def get_rnaseq_files(self):
         """
-        Returns a dictionary mapping barcode to a dictionary of RNASeqV2 files
+        Returns a dictionary mapping barcode to a dictionary of RNASeqV2 files. Although these
+        should all be tumor files, we still label them to keep the return type consistent,
+        dict<BARCODE, dict<type, rnaseq_filename>>, with the rest of the return types, and to
+        be more explicit
         """
         # We want RSEM_genes_normalized
         rnaseq_sdrf_archives = [
@@ -203,14 +213,7 @@ class TcgaFileFinder(object):
                                 detailed_barcode = entry["Comment [TCGA Barcode]"]
                                 detailed_barcode_tokenized = detailed_barcode.split("-")
                                 sample_site = int(detailed_barcode_tokenized[3][:-1])
-                                if sample_site < 10:
-                                    sample_type = "tumor"
-                                elif sample_site < 20:
-                                    sample_type = "normal"
-                                elif sample_site < 30:
-                                    sample_type = "control"
-                                else:
-                                    raise ValueError("%i is not a recognized sample type" % sample_site)
+                                sample_type = self._get_sampletype_from_site(sample_site)
                                 retval[barcode][sample_type] = fullname
         # print(len(retval))
         # for barcode, filenames in retval.items():

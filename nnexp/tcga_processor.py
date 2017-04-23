@@ -39,7 +39,9 @@ def main():
 
     # Gather all the files
     cnv_files = filefinder.get_cnv_files()
+    assert len(cnv_files) > 0
     rnaseq_files = filefinder.get_rnaseq_files()
+    assert len(rnaseq_files) > 0
     protexp_files = filefinder.get_protexp_files()
 
     # Get the barcodes that have clinical, cnv, rnaseq, and protexp data
