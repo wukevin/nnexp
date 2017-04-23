@@ -18,8 +18,12 @@ import shutil
 # Constants for where files are located
 if sys.platform == 'win32' or sys.platform == "win64":
     DRIVE_ROOT = "E:\\"
-if sys.platform == "linux2" or sys.platform == "linux":
+elif sys.platform == "linux2" or sys.platform == "linux":
     DRIVE_ROOT = "/mnt/e/"
+elif sys.platform == "darwin":
+    DRIVE_ROOT = "/Volumes/Data"
+else:
+    raise RuntimeError("Unrecognized OS: %s" % sys.platform)
 # Manifest
 MANIFEST_FILE = os.path.join(DRIVE_ROOT, "gdc_manifest.geneexp_cnv_clinical_methylation_protexp.2017-04-08T23-26-44.308108.tsv")
 # Contains all the downloaded data

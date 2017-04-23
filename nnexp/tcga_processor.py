@@ -43,7 +43,7 @@ def main():
     protexp_files = filefinder.get_protexp_files()
 
     # Get the barcodes that have clinical, cnv, rnaseq, and protexp data
-    common_barcodes = [x for x in tcga_objects.keys() if x in cnv_files and x in rnaseq_files and x in protexp_files]
+    # common_barcodes = [x for x in tcga_objects.keys() if x in cnv_files and x in rnaseq_files and x in protexp_files]
 
 if __name__ == "__main__":
     main()
