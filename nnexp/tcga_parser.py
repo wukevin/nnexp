@@ -212,11 +212,11 @@ class TcgaFileFinder(object):
                                 else:
                                     raise ValueError("%i is not a recognized sample type" % sample_site)
                                 retval[barcode][sample_type] = fullname
-        print(len(retval))
-        for barcode, filenames in retval.items():
-            print(barcode)
-            for sampletype, samplefile in filenames.items():
-                print("%s:\t%s" % (sampletype, samplefile))
+        # print(len(retval))
+        # for barcode, filenames in retval.items():
+        #     print(barcode)
+        #     for sampletype, samplefile in filenames.items():
+        #         print("%s:\t%s" % (sampletype, samplefile))
         return retval
     def get_protexp_files(self):
         """
