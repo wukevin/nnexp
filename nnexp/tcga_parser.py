@@ -180,7 +180,44 @@ class TcgaFileFinder(object):
         """
         Returns a dictionary mapping barcode to a dictionary of RNASeqV2 files
         """
-
+        # We want RSEM_genes_normalized
+        rnaseq_sdrf_archives = [
+            "unc.edu_BRCA.IlluminaHiSeq_RNASeqV2.mage-tab.1.12.0.tar.gz",
+            "unc.edu_BRCA.IlluminaHiSeq_TotalRNASeqV2.mage-tab.1.1.0.tar.gz",
+        ]
+        retval = collections.defaultdict(dict)
+        for basename, fullname in self.filemap.items():
+            if re.search(r"rsem.genes.normalized_results$", basename) is not None:
+                curr_dir = os.path.dirname(fullname)
+                if os.path.isfile(os.path.join(curr_dir, rnaseq_sdrf_archives[0])):
+                    archive_key = rnaseq_sdrf_archives[0]
+                elif os.path.isfile(os.path.join(curr_dir, rnaseq_sdrf_archives[1])):
+                    archive_key = rnaseq_sdrf_archives[1]
+                else:
+                    raise RuntimeError("Cannot find a valid archive filekey in %s" % curr_dir)
+                sdrf_table = self.sdrfs[archive_key]
+                for barcode, entries in sdrf_table.items():
+                    for entry in entries:
+                        for item in entry.values():
+                            if item == basename:
+                                detailed_barcode = entry["Comment [TCGA Barcode]"]
+                                detailed_barcode_tokenized = detailed_barcode.split("-")
+                                sample_site = int(detailed_barcode_tokenized[3][:-1])
+                                if sample_site < 10:
+                                    sample_type = "tumor"
+                                elif sample_site < 20:
+                                    sample_type = "normal"
+                                elif sample_site < 30:
+                                    sample_type = "control"
+                                else:
+                                    raise ValueError("%i is not a recognized sample type" % sample_site)
+                                retval[barcode][sample_type] = fullname
+        print(len(retval))
+        for barcode, filenames in retval.items():
+            print(barcode)
+            for sampletype, samplefile in filenames.items():
+                print("%s:\t%s" % (sampletype, samplefile))
+        return retval
     def get_protexp_files(self):
         """
         Returns a dictionary mapping barcode to a dictionary of protein expression files
