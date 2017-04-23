@@ -132,22 +132,55 @@ class TcgaFileFinder(object):
         pattern = r"\.tar\.gz"
         return re.sub(pattern, "", os.path.basename(magetab_basename))
 
-    def get_cnv_files(self, key="barcode"):
-        """Returns a dictionary mapping key to cnv files. Only returns cnv files assoc with hg19"""
-        if key not in self.accepted_keys:
-            raise ValueError("%s must be one of: %s" % (key, " ".join(self.accepted_keys)))
-        retval = {}
-        counter = 0
+    def get_cnv_files(self):
+        """
+        Returns a dictionary mapping barcode to dictionary of cnv files. Only returns cnv files assoc with hg19
+        Dictionary type is dict<BARCODE, dict<type, cnv_filename>>
+        """
+        cnv_sdrf_archive = "broad.mit.edu_BRCA.Genome_Wide_SNP_6.mage-tab.1.2024.0.tar.gz"
+        # if key not in self.accepted_keys:
+        #     raise ValueError("%s must be one of: %s" % (key, " ".join(self.accepted_keys)))
+        retval = collections.defaultdict(dict)
         for basename, fullname in self.filemap.items():
             if re.search(r"_hg19.seg.txt$", basename) is not None: # We found a CNV hg19 file
                 # This is the directory that we are currently in
                 curr_dir = os.path.dirname(fullname)
-                # if os.path.isfile(os.path.join(curr_dir, "annotations.txt")):
-                print(curr_dir)
-                print(os.listdir(curr_dir))
-                counter += 1
-        print(counter)
+                # archive for CNVs is broad.mit.edu_BRCA.Genome_Wide_SNP_6.mage-tab.1.2024.0.tar.gz
+                assert os.path.isfile(os.path.join(curr_dir, cnv_sdrf_archive))
+                archive_key = cnv_sdrf_archive
+                sdrf_table = self.sdrfs[archive_key]
+                # Since teh table is a dictioanry of barcode --> items, iterate through those pairs
+                for barcode, entries in sdrf_table.items():
+                    for entry in entries: # For each row belonging to that barcode
+                        for item in entry.values(): # For each item in that row
+                            if item == basename: # If the item matches...
+                                detailed_barcode = entry["Comment [TCGA Barcode]"]
+                                detailed_barcode_tokenized = detailed_barcode.split("-")
+                                sample_site = int(detailed_barcode_tokenized[3][:-1])
+                                if sample_site < 10:
+                                    sample_type = "tumor"
+                                elif sample_site < 20:
+                                    sample_type = "normal"
+                                elif sample_site < 30:
+                                    sample_type = "control"
+                                else:
+                                    raise ValueError("%i is not a recognized sample type" % sample_site)
+                                retval[barcode][sample_type] = fullname
+        # for barcode, filenames in retval.items():
+        #     print(barcode)
+        #     for sample_type, sample_filename in filenames.items():
+        #         print("%s:\t%s" % (sample_type, sample_filename))
         return retval
+
+    def get_rnaseq_files(self):
+        """
+        Returns a dictionary mapping barcode to a dictionary of RNASeqV2 files
+        """
+    
+    def get_protexp_files(self):
+        """
+        Returns a dictionary mapping barcode to a dictionary of protein expression files
+        """
 
 def create_barcode_uuid_mapping(biotab_file):
     """Return a pair of dict mappings from uuid -> barcode and barcode -> uuid"""
