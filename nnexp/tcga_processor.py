@@ -43,6 +43,7 @@ def main():
     rnaseq_files = filefinder.get_rnaseq_files()
     assert len(rnaseq_files) > 0
     protexp_files = filefinder.get_protexp_files()
+    assert len(protexp_files) > 0
 
     # Get the barcodes that have clinical, cnv, rnaseq, and protexp data
     # common_barcodes = [x for x in tcga_objects.keys() if x in cnv_files and x in rnaseq_files and x in protexp_files]

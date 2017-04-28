@@ -225,6 +225,28 @@ class TcgaFileFinder(object):
         """
         Returns a dictionary mapping barcode to a dictionary of protein expression files
         """
+        rppa_sdrf_archive = "mdanderson.org_BRCA.MDA_RPPA_Core.mage-tab.1.5.0.tar.gz"
+        retval = collections.defaultdict(dict)
+        for basename, fullname in self.filemap.items():
+            if re.search(r"RPPA_Core\.protein_expression", basename) is not None: # FILL IN LATER
+                curr_dir = os.path.dirname(fullname)
+                if not os.path.isfile(os.path.join(curr_dir, rppa_sdrf_archive)):
+                    raise RuntimeError("Cannot find valid archive in %s" % curr_dir)
+                sdrf_table = self.sdrfs[rppa_sdrf_archive]
+                for barcode, entries in sdrf_table.items():
+                    for entry in entries:
+                        for item in entry.values():
+                            if item == basename:
+                                detailed_barcode = entry["Extract Name"]
+                                detailed_barcode_tokenized = detailed_barcode.split("-")
+                                sample_site = int(detailed_barcode_tokenized[3][:-1])
+                                sample_type = self._get_sampletype_from_site(sample_site)
+                                retval[barcode][sample_type] = fullname
+        for barcode, filenames in retval.items():
+            print(barcode)
+            for sampletype, samplefile in filenames.items():
+                print("%s\t%s" % (sampletype, samplefile))
+        return retval
 
 def create_barcode_uuid_mapping(biotab_file):
     """Return a pair of dict mappings from uuid -> barcode and barcode -> uuid"""
