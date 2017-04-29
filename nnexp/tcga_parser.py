@@ -51,6 +51,7 @@ class TcgaPatient(object):
         if len(matches) != 1 or matches[0] != tcga_id:
             raise ValueError("Unrecognized TCGA ID: %s" % tcga_id)
         self.barcode = tcga_id
+        self.data_files = {} # Maps datatype --> tumor/normal --> file
         self.clinical = {}
         self.cnv = {}
         self.gene_exp = {}
@@ -242,10 +243,10 @@ class TcgaFileFinder(object):
                                 sample_site = int(detailed_barcode_tokenized[3][:-1])
                                 sample_type = self._get_sampletype_from_site(sample_site)
                                 retval[barcode][sample_type] = fullname
-        for barcode, filenames in retval.items():
-            print(barcode)
-            for sampletype, samplefile in filenames.items():
-                print("%s\t%s" % (sampletype, samplefile))
+        # for barcode, filenames in retval.items():
+        #     print(barcode)
+        #     for sampletype, samplefile in filenames.items():
+        #         print("%s\t%s" % (sampletype, samplefile))
         return retval
 
 def create_barcode_uuid_mapping(biotab_file):

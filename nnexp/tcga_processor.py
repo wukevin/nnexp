@@ -4,6 +4,7 @@ Processes TCGA data to produces the raw "images" that we
 feed into the neural net
 """
 import tcga_parser
+import time
 
 def create_tcga_objects(biotab):
     """
@@ -38,15 +39,28 @@ def main():
     )
 
     # Gather all the files
+    start_time = time.time()
     cnv_files = filefinder.get_cnv_files()
     assert len(cnv_files) > 0
     rnaseq_files = filefinder.get_rnaseq_files()
     assert len(rnaseq_files) > 0
     protexp_files = filefinder.get_protexp_files()
     assert len(protexp_files) > 0
+    print("Finished gathering files in %f seconds" % (time.time() - start_time))
 
     # Get the barcodes that have clinical, cnv, rnaseq, and protexp data
-    # common_barcodes = [x for x in tcga_objects.keys() if x in cnv_files and x in rnaseq_files and x in protexp_files]
+    common_barcodes = set([x for x in tcga_objects.keys() if x in cnv_files and x in rnaseq_files and x in protexp_files])
+
+    # Filter out TCGA patients that don't have "complete" data
+    tcga_objects = [x for x in tcga_objects.values() if x.barcode in common_barcodes]
+
+    # Fill in the TCGA objects
+    for tcga_case in tcga_objects:
+        tcga_case.data_files['cnv'] = cnv_files[tcga_case.barcode]
+        tcga_case.data_files['rnaseq'] = rnaseq_files[tcga_case.barcode]
+        tcga_case.data_files['rppa'] = protexp_files[tcga_case.barcode]
+    
+    # Write these TCGA objects to disk 
 
 if __name__ == "__main__":
     main()
