@@ -5,6 +5,8 @@ feed into the neural net
 """
 import tcga_parser
 import time
+import os
+import pickle
 
 def create_tcga_objects(biotab):
     """
@@ -59,8 +61,17 @@ def main():
         tcga_case.data_files['cnv'] = cnv_files[tcga_case.barcode]
         tcga_case.data_files['rnaseq'] = rnaseq_files[tcga_case.barcode]
         tcga_case.data_files['rppa'] = protexp_files[tcga_case.barcode]
-    
-    # Write these TCGA objects to disk 
+
+    # Write these TCGA objects to disk
+    tcga_objects_directory = os.path.join(
+        tcga_parser.DATA_ROOT, "tcga_patient_objects"
+    )
+    if not os.path.isdir(tcga_objects_directory):
+        os.makedirs(tcga_objects_directory)
+    for obj in tcga_objects:
+        filename_output = os.path.join(tcga_objects_directory, "%s.pickled" % obj.barcode)
+        with open(filename_output, 'wb') as handle:
+            pickle.dump(obj, handle)
 
 if __name__ == "__main__":
     main()

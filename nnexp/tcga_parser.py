@@ -14,6 +14,7 @@ import collections
 import subprocess
 import tarfile
 import shutil
+import pickle
 
 # Constants for where files are located
 if sys.platform == 'win32' or sys.platform == "win64":
