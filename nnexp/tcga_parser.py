@@ -15,6 +15,8 @@ import subprocess
 import tarfile
 import shutil
 import pickle
+import intervaltree
+import numpy as np
 
 # Constants for where files are located
 if sys.platform == 'win32' or sys.platform == "win64":
@@ -54,9 +56,9 @@ class TcgaPatient(object):
         self.barcode = tcga_id
         self.data_files = {} # Maps datatype --> tumor/normal --> file
         self.clinical = {}
-        self.cnv = {}
-        self.gene_exp = {}
-        self.prot_exp = {}
+        self.cnv = None
+        self.gene_exp = None
+        self.prot_exp = None
 
     def add_clinical_data(self, clinical):
         self.clinical = clinical
@@ -64,6 +66,12 @@ class TcgaPatient(object):
     def attach_relevant_cases(self, list_of_files):
         """Given a whole list of files, find relevant files to fill in the fields"""
         pass
+
+    def parse_attached_files(self):
+        """Parses the files"""
+        self.cnv = parse_cnv_file(self.data_files['cnv']['tumor'])
+        self.gene_exp = parse_rnaseq_file(self.data_files['rnaseq']['tumor'])
+        self.prot_exp = parse_proteq_file(self.data_files['rppa']['tumor'])
 
 
 class TcgaFileFinder(object):
@@ -278,6 +286,74 @@ def create_barcode_uuid_mapping(biotab_file):
     return uuid_to_barcode, barcode_to_uuid
 
 
+def parse_cnv_file(filename):
+    """
+    Parse the given cnv file and return it as an intervaltree mapping
+    chromosomes (including chr) to intervals to tne dictreader entries
+    """
+    # Example:
+    # '/mnt/e/TCGA-BRCA/5dfc6792-ffa4-4a5d-90f1-4fc79725b538/TAKEN_p_TCGAb_379_400_FFPE_NSP_GenomeWideSNP_6_B10_1513270.nocnv_hg19.seg.txt'
+    with open(filename, 'r') as handle:
+        entries = [e for e in csv.DictReader(handle, delimiter='\t')]
+    table = collections.defaultdict(intervaltree.IntervalTree)
+    for entry in entries:
+        try:
+            chromosome = entry['Chromosome']
+        except KeyError:
+            print(entry)
+            raise RuntimeError("%s: cannot find Chromosome key" % filename)
+        start, end = int(entry['Start']), int(entry['End'])
+        if start > end:
+            print(entry)
+            raise RuntimeError("Start cannot be greater than the end: %i %i" % (start, end))
+        if 'chr' not in chromosome:
+            chromosome = 'chr' + chromosome
+        table[chromosome][start:end] = entry
+    return table
+
+
+def parse_proteq_file(filename, simplify_protein_names=True):
+    """Parse the given protein expression file"""
+    # Example:
+    # /mnt/e/TCGA-BRCA/b09881e2-d622-4e5c-834a-18b893848de9/mdanderson.org_BRCA.MDA_RPPA_Core.protein_expression.Level_3.F3DF6E4D-CA53-4DEA-B48D-652306B60C77.txt
+    with open(filename, 'r') as handle:
+        entries = [e for e in csv.DictReader(handle, delimiter='\t')]
+    table = {}
+    for entry in entries:
+        if simplify_protein_names:
+            name = entry['Sample REF'].split("-")[0]
+            assert len(name) > 0
+        else:
+            name = entry['Sample REF']
+        table[name] = entry
+    return table
+
+
+def parse_rnaseq_file(filename, simplify_protein_names=True):
+    """Parse the given rnaseq file"""
+    # Example:
+    # '/mnt/e/TCGA-BRCA/e14229d4-0b13-4a10-b3f8-4da098c1d218/unc.edu.4c80c4a1-7e99-4f9e-b32c-898ae20206c5.2612041.rsem.genes.normalized_results'
+    with open(filename, 'r') as handle:
+        entries = [e for e in csv.DictReader(handle, delimiter='\t')]
+    # Gather all the values
+    all_values_table = collections.defaultdict(list)
+    for entry in entries:
+        if simplify_protein_names:
+            name = entry['gene_id'].split("|")[0]
+            assert len(name) > 0
+        else:
+            name = entry['gene_id']
+        if "?" in name: # We don't care about these as they aren't useful anyway
+            continue
+        # If we see a double occurence, just average the values and move on
+        all_values_table[name].append(float(entry['normalized_count']))
+    # Average on a per-entry basis
+    retval = {}
+    for name, values in all_values_table.items():
+        retval[name] = np.mean(values)
+    return retval
+
+
 def read_sdrf(sdrf_file):
     """Reads the given sdrf_file. Returns a dictionary <TCGA_BARCODE, DICT_OF_ELEMENTS>"""
     assert os.path.isfile(sdrf_file) and "sdrf" in os.path.basename(sdrf_file)
@@ -387,4 +463,7 @@ if __name__ == "__main__":
     # assert len(desired_biotabs) == 1
     # clinical_data = read_biotab(CLINICAL_PATIENT_BRCA)
     # for entry in clinical_data:
-    pass
+    # pass
+    parse_cnv_file("/mnt/e/TCGA-BRCA/5dfc6792-ffa4-4a5d-90f1-4fc79725b538/TAKEN_p_TCGAb_379_400_FFPE_NSP_GenomeWideSNP_6_B10_1513270.nocnv_hg19.seg.txt")
+    parse_proteq_file("/mnt/e/TCGA-BRCA/b09881e2-d622-4e5c-834a-18b893848de9/mdanderson.org_BRCA.MDA_RPPA_Core.protein_expression.Level_3.F3DF6E4D-CA53-4DEA-B48D-652306B60C77.txt")
+    parse_rnaseq_file('/mnt/e/TCGA-BRCA/e14229d4-0b13-4a10-b3f8-4da098c1d218/unc.edu.4c80c4a1-7e99-4f9e-b32c-898ae20206c5.2612041.rsem.genes.normalized_results')

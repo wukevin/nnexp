@@ -62,13 +62,16 @@ def main():
         tcga_case.data_files['rnaseq'] = rnaseq_files[tcga_case.barcode]
         tcga_case.data_files['rppa'] = protexp_files[tcga_case.barcode]
 
-    # Write these TCGA objects to disk
+    # Read in the files, then write these TCGA objects to disk
     tcga_objects_directory = os.path.join(
         tcga_parser.DATA_ROOT, "tcga_patient_objects"
     )
     if not os.path.isdir(tcga_objects_directory):
         os.makedirs(tcga_objects_directory)
     for obj in tcga_objects:
+        # Read in the associated files, attaching them to the object
+        obj.parse_attached_files()
+        # Write to disk
         filename_output = os.path.join(tcga_objects_directory, "%s.pickled" % obj.barcode)
         with open(filename_output, 'wb') as handle:
             pickle.dump(obj, handle)
