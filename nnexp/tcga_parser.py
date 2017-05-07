@@ -69,7 +69,10 @@ class TcgaPatient(object):
 
     def parse_attached_files(self):
         """Parses the files"""
-        self.cnv = parse_cnv_file(self.data_files['cnv']['tumor'])
+        try:
+            self.cnv = parse_cnv_file(self.data_files['cnv']['tumor'])
+        except KeyError:
+            print("%s has no tumor CNV data" % (self.barcode))
         self.gene_exp = parse_rnaseq_file(self.data_files['rnaseq']['tumor'])
         self.prot_exp = parse_proteq_file(self.data_files['rppa']['tumor'])
 
@@ -303,9 +306,11 @@ def parse_cnv_file(filename):
             print(entry)
             raise RuntimeError("%s: cannot find Chromosome key" % filename)
         start, end = int(entry['Start']), int(entry['End'])
-        if start > end:
+        if start >= end:
             print(entry)
-            raise RuntimeError("Start cannot be greater than the end: %i %i" % (start, end))
+            print("%s: Start cannot be greater than or equal to the end: %i %i. Skipping..." % (filename, start, end))
+            continue
+        # Make sure the chromosome follows the common pattern
         if 'chr' not in chromosome:
             chromosome = 'chr' + chromosome
         table[chromosome][start:end] = entry
