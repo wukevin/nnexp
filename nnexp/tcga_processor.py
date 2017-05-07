@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Processes TCGA data to produces the raw "images" that we
-feed into the neural net
+Processes TCGA data to produces the raw TCGA patient objects. We
+then feed these objects into downstream functions to generate
+images based on the raw data, which are then fed into the neural net
 """
 import tcga_parser
 import time
