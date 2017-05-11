@@ -76,6 +76,69 @@ class TcgaPatient(object):
         self.gene_exp = parse_rnaseq_file(self.data_files['rnaseq']['tumor'])
         self.prot_exp = parse_proteq_file(self.data_files['rppa']['tumor'])
 
+    def cnv_values(self):
+        """
+        Return the CNV data condensed as an intervaltree of floats
+        """
+        if self.cnv is None:
+            return None
+        retval = collections.defaultdict(intervaltree.IntervalTree)
+        # If we do not have CNV data, then we return None
+        for chromosome, itree in self.cnv.items():
+            for interval_object in itree: # iterating over an interval tree doesn't use key/value pairing
+                val = float(interval_object.data['Segment_Mean'])
+                retval[chromosome][interval_object.begin:interval_object.end] = val
+        return retval
+
+    def gene_values(self):
+        """
+        Returns the rna seq data as a dictionary mapping genes to floats. If there
+        are genes with multiple observations, those values will be averaged
+        in the returned dictionary
+        """
+        if self.gene_exp is None:
+            return None
+        gene_expression_data = collections.defaultdict(list)
+        for gene, entry in self.gene_exp.items():
+            gene_expression_data[gene].append(float(entry))
+        retval = {}
+        for gene, values in gene_expression_data.items():
+            assert len(values) > 0
+            if len(values) > 1:
+                retval[gene] = np.mean(values)
+            else:
+                retval[gene] = values[0]
+        return retval
+
+    def prot_values(self):
+        """
+        Returns the protein expression data asa  dictionary mapping the genes
+        to floats. If there are genes with multiple observations, their values will
+        be averaged in the returned dictionary
+        """
+        if self.prot_exp is None:
+            return None
+
+        protein_expression_data = collections.defaultdict(list)
+        for gene, entry in self.prot_exp.items():
+            keys = list(entry.keys())
+            assert len(keys) == 2
+            expression_key = keys[0] if keys[0] != 'Sample REF' else keys[1]
+            # this crops up sometimes - skip it before we try to add it to the
+            # defaultdict and create an empty list
+            if entry[expression_key] == 'Protein Expression':
+                continue
+            protein_expression_data[gene].append(float(entry[expression_key]))
+        # Average the values if there are multiple
+        retval = {}
+        for gene, values in protein_expression_data.items():
+            if len(values) == 0:
+                raise RuntimeError("Found gene with no values: %s" % gene)
+            if len(values) > 1:
+                retval[gene] = np.mean(values)
+            else:
+                retval[gene] = values[0]
+        return retval
 
 class TcgaFileFinder(object):
     """
