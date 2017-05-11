@@ -118,8 +118,11 @@ def get_all_genomic_breakpoints():
         except AttributeError:
             print("%s was skipped because of attribute error" % patient.barcode)
             continue
+    total_breakpoint_count = 0
     for chromosome, breakpoints in chromosome_breakpoints.items():
         print("%s\t%i breakpoints" % (chromosome, len(breakpoints)))
+        total_breakpoint_count += len(breakpoints)
+    print("Total: %i" % total_breakpoint_count)
 
 def main():
     get_all_genomic_breakpoints()
