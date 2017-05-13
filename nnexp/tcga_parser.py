@@ -78,7 +78,7 @@ class TcgaPatient(object):
 
     def cnv_values(self):
         """
-        Return the CNV data condensed as an intervaltree of floats
+        Return the CNV data condensed as a dictionary of intervaltrees of floats
         """
         if self.cnv is None:
             return None
