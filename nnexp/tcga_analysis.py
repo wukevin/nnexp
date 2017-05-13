@@ -140,8 +140,55 @@ def get_all_genomic_breakpoints():
     print("Wrote breakpoint data to: %s" % breakpoints_output_file)
 
 
+def get_range_of_values():
+    """
+    Gets the range of values (i.e. min and maximum value) within each datatype
+    """
+    pattern = os.path.join(
+        tcga_parser.DATA_ROOT,
+        "tcga_patient_objects",
+        "TCGA*.pickled"
+    )
+    tcga_patient_files = glob.glob(pattern)
+    ensembl_genes = gtf_parser.Gtf(os.path.join(tcga_parser.DRIVE_ROOT, "Homo_sapiens.GRCh37.87.gtf"),
+                                   "gene", set(['ensembl_havana']))
+    if len(tcga_patient_files) == 0:
+        raise RuntimeError("Found no files matching pattern:\n%s" % pattern)
+
+    # Load in all the patients
+    patients = []
+    for patient_file in tcga_patient_files:
+        with open(patient_file, 'rb') as handle:
+            patient = pickle.load(handle)
+        assert isinstance(patient, tcga_parser.TcgaPatient)
+        patients.append(patient)
+
+    cnv_values = []
+    rna_values = []
+    prot_values = []
+    for patient in patients:
+        if patient.cnv_values() is not None:
+            cnv_values.extend([x.data for chromosome, itree in patient.cnv_values().items() for x in itree])
+        if patient.gene_values() is not None:
+            rna_values.extend([x for x in patient.gene_values().values()])
+        if patient.prot_values() is not None:
+            prot_values.extend([x for x in patient.prot_values().values()])
+    
+    # Define the file that we will write to
+    if not os.path.isdir(RESULTS_DIR):
+        os.makedirs(RESULTS_DIR)
+    ranges_file = os.path.join(RESULTS_DIR, "ranges.txt")
+    with open(ranges_file, 'w') as handle:
+        handle.write("cnv %f - %f\n" % (min(cnv_values), max(cnv_values)))
+        handle.write("gene %f - %f\n" % (min(rna_values), max(rna_values)))
+        handle.write("prot %f - %f\n" % (min(prot_values), max(prot_values)))
+    print("Wrote minimum/maximum values for each datatype to: %s" % ranges_file)
+
+
 def main():
-    get_all_genomic_breakpoints()
+    # get_all_genomic_breakpoints()
+    # get_range_of_values()
+    pass
 
 if __name__ == "__main__":
     main()
