@@ -15,6 +15,11 @@ import tcga_parser
 import tcga_imaging
 import gtf_parser
 
+RESULTS_DIR = os.path.join(
+    tcga_parser.DRIVE_ROOT,
+    "results"
+)
+
 def most_different_genes():
     """
     Calculates the most idfferentially expressed intervals from cnv data
@@ -118,11 +123,22 @@ def get_all_genomic_breakpoints():
         except AttributeError:
             print("%s was skipped because of attribute error" % patient.barcode)
             continue
+    
+    # Total the breakpoints and write them to an output file
+    if not os.path.isdir(RESULTS_DIR): # Make the results directory if it doesn't already exist
+        os.makedirs(RESULTS_DIR)
+    breakpoints_output_file = os.path.join(RESULTS_DIR, "breakpoints.txt")
     total_breakpoint_count = 0
-    for chromosome, breakpoints in chromosome_breakpoints.items():
-        print("%s\t%i breakpoints" % (chromosome, len(breakpoints)))
-        total_breakpoint_count += len(breakpoints)
-    print("Total: %i" % total_breakpoint_count)
+    with open(breakpoints_output_file, 'w') as handle:
+        for chromosome, breakpoints in chromosome_breakpoints.items():
+            # Print to terminal
+            print("%s\t%i breakpoints" % (chromosome, len(breakpoints)))
+            total_breakpoint_count += len(breakpoints)
+            # Write to file
+            handle.write(chromosome + ": " + ','.join([str(x) for x in breakpoints]) + "\n")
+        print("Total: %i" % total_breakpoint_count)
+    print("Wrote breakpoint data to: %s" % breakpoints_output_file)
+
 
 def main():
     get_all_genomic_breakpoints()
