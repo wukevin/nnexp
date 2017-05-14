@@ -45,7 +45,7 @@ def value_within_range(value, minimum, maximum):
     """
     Checks whether the given value falls wtihin the given minimum/maximum range, inclusive
     """
-    if math.isclose(value, minimum, rel_tol=1e-5) or math.isclose(value, maximum, rel_tol=1e-5):
+    if math.isclose(value, minimum, rel_tol=1e-6) or math.isclose(value, maximum, rel_tol=1e-6):
         return True
     if value >= minimum and value <= maximum:
         return True
