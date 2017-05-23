@@ -147,6 +147,91 @@ def create_image_full_union(patient, gene_intervals, breakpoints_file, ranges_fi
     scipy.misc.imsave(image_path, img)
     print("Generated %s in %f seconds" % (image_path, time.time() - start_time))
 
+
+def create_image_full_union_single_vector(patient, gene_intervals, breakpoints_file, ranges_file):
+    """
+    Uses every single value in the union of all the datatypes, much like the above function.
+    The difference is that in the above, we are compositing into a 2D image where the vertical
+    axis is thecchromosome, and the horizontal axis is position along that chromosome. Here, all
+    the chromosomes sit along the same 1D axis, in alphabetical order.
+    """
+    assert isinstance(patient, tcga_parser.TcgaPatient)
+    assert isinstance(gene_intervals, gtf_parser.Gtf)
+
+    start_time = time.time()
+    # reads in the data as both interval trees and in sorted dicts
+    try:
+        rna_intervals = gene_to_interval(patient.gene_values(), gene_intervals)
+        rna_intervals_sorted = {chromosome:interval_to_sorteddict(itree) for chromosome, itree in rna_intervals.items()}
+        protein_intervals = gene_to_interval(patient.prot_values(), gene_intervals)
+        protein_intervals_sorted = {chromosome:interval_to_sorteddict(itree) for chromosome, itree in protein_intervals.items()}
+        cnv_intervals = patient.cnv_values()
+        cnv_intervals_sorted = {chromosome:interval_to_sorteddict(itree) for chromosome, itree in cnv_intervals.items()}
+    except AttributeError:
+        # Some data may be missing for some patients - for those we simply dont' generate an image
+        return None
+
+    # # Read in the ranges and breakpoints file
+    breakpoints = {}
+    with open(breakpoints_file, 'r') as handle:
+        for line in handle:
+            line = line.rstrip()
+            chromosome, points = line.split(": ")
+            breakpoints[chromosome] = sortedcontainers.SortedList([int(x) for x in points.split(",")])
+    ranges = {}
+    with open(ranges_file, 'r') as handle:
+        for line in handle:
+            line = line.rstrip()
+            datatype, minimum, _null, maximum = line.split()
+            ranges[datatype] = (float(minimum), float(maximum))
+
+    # In total we have 328934 breakpoints
+    # https://stackoverflow.com/questions/12062920/how-do-i-create-an-image-in-pil-using-a-list-of-rgb-tuples
+    width = sum([len(x) for x in breakpoints.values()])
+    chr_cum_sum = {} # Describes how many breakpoints occured before the chromosome, noninclusive
+    for chromosome in breakpoints.keys():
+        chr_cum_sum[chromosome] = sum([len(bps) for chrom, bps in breakpoints.items() if chrom < chromosome])
+    # Create the template for the image that we are going to create
+    height = 1
+    channels = 3 # RGB
+    img = np.zeros((height, width, channels), dtype=np.uint8) # unsigned 8-bit integers are 0-255
+    # We walk through the chromosomes
+    for channel_index, sorted_intervals in enumerate([cnv_intervals_sorted, rna_intervals_sorted, protein_intervals_sorted]):
+        for chromosome in breakpoints.keys():
+            # Fill in CNV data on a scale of 0-255
+            try:
+                values_for_chromosome = sorted_intervals[chromosome]
+            except KeyError:
+                # This chromosome doesn't exist for this datatype - oh well let's move on
+                continue
+            for start_stop_tuple, value in values_for_chromosome.items():
+                # Normalize the value to be within the 0-255 range
+                if channel_index == 0:
+                    minimum, maximum = ranges['cnv']
+                elif channel_index == 1:
+                    minimum, maximum = ranges['gene']
+                elif channel_index == 2:
+                    minimum, maximum = ranges['prot']
+                else:
+                    raise ValueError("Unrecognized channel index: %i" % channel_index)
+                if not value_within_range(value, minimum, maximum):
+                    raise ValueError("%s WARNING: Given value %f does not fall in the min/max range: %f/%f" % (patient.barcode, value, minimum, maximum))
+                value_normalized = np.uint8((float(value) - float(minimum)) / float(maximum) * 255)
+                
+                start, stop = start_stop_tuple # Figure out the positions where it starts/stops
+                start_index = breakpoints[chromosome].index(start) # Figure out where those coordinates lie on the list of sorted breakpoints
+                stop_index = breakpoints[chromosome].index(stop)
+                if not stop_index > start_index:
+                    print("%s WARNING: Start index (%i) is not less than stop index (%i) for channel %i, chromosome %s" % (patient.barcode, start, stop, channel_index, chromosome))
+                for col_index in range(start_index, stop_index + 1): # +1 to be inclusive of the stop index
+                    img[0][col_index + chr_cum_sum[chromosome]][channel_index] = value_normalized
+
+    if not os.path.isdir(IMAGES_DIR):
+        os.makedirs(IMAGES_DIR)
+    image_path = os.path.join(IMAGES_DIR, "%s.expression.png" % patient.barcode)
+    scipy.misc.imsave(image_path, img)
+    print("Generated %s in %f seconds" % (image_path, time.time() - start_time))
+
 ##### HERE ARE THE UTILITY FUNCTIONS FOR THEM #####
 
 
@@ -221,6 +306,7 @@ def main():
             patient = pickle.load(handle)
         assert isinstance(patient, tcga_parser.TcgaPatient)
         patients.append(patient)
+    print("Finished loading in patient objects")
     #     create_image_full_union(
     #         patient,
     #         ensembl_genes,
@@ -229,7 +315,8 @@ def main():
     #     )
     # Create the images in parallel
     pool = multiprocessing.Pool(4)
-    pool.map(functools.partial(create_image_full_union, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
+    # pool.map(functools.partial(create_image_full_union, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
+    pool.map(functools.partial(create_image_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
 
 if __name__ == "__main__":
     main()
