@@ -154,6 +154,8 @@ def create_image_full_union_single_vector(patient, gene_intervals, breakpoints_f
     The difference is that in the above, we are compositing into a 2D image where the vertical
     axis is thecchromosome, and the horizontal axis is position along that chromosome. Here, all
     the chromosomes sit along the same 1D axis, in alphabetical order.
+
+    For some reason, the png fiels produced by thsi fucntion can't be opened by windows photo viewer
     """
     assert isinstance(patient, tcga_parser.TcgaPatient)
     assert isinstance(gene_intervals, gtf_parser.Gtf)
@@ -194,7 +196,9 @@ def create_image_full_union_single_vector(patient, gene_intervals, breakpoints_f
     # Create the template for the image that we are going to create
     height = 1
     channels = 3 # RGB
-    img = np.zeros((height, width, channels), dtype=np.uint8) # unsigned 8-bit integers are 0-255
+    dimensions = (height, width, channels)
+    print(dimensions)
+    img = np.zeros(dimensions, dtype=np.uint8) # unsigned 8-bit integers are 0-255
     # We walk through the chromosomes
     for channel_index, sorted_intervals in enumerate([cnv_intervals_sorted, rna_intervals_sorted, protein_intervals_sorted]):
         for chromosome in breakpoints.keys():
@@ -224,12 +228,15 @@ def create_image_full_union_single_vector(patient, gene_intervals, breakpoints_f
                 if not stop_index > start_index:
                     print("%s WARNING: Start index (%i) is not less than stop index (%i) for channel %i, chromosome %s" % (patient.barcode, start, stop, channel_index, chromosome))
                 for col_index in range(start_index, stop_index + 1): # +1 to be inclusive of the stop index
-                    img[0][col_index + chr_cum_sum[chromosome]][channel_index] = value_normalized
-
+                    col_index_with_offset = col_index + chr_cum_sum[chromosome]
+                    assert col_index_with_offset < width
+                    for i in range(height):
+                        img[i][col_index_with_offset][channel_index] = value_normalized
     if not os.path.isdir(IMAGES_DIR):
         os.makedirs(IMAGES_DIR)
     image_path = os.path.join(IMAGES_DIR, "%s.expression.png" % patient.barcode)
     scipy.misc.imsave(image_path, img)
+    print(img.shape)
     print("Generated %s in %f seconds" % (image_path, time.time() - start_time))
 
 ##### HERE ARE THE UTILITY FUNCTIONS FOR THEM #####
