@@ -166,7 +166,7 @@ def softmax(patients):
     # Training
     for _ in range(1000):
         batch_xs, batch_ys = expression_data.next_training_batch(50)
-        sess.run(train_step, feed_dict={x: batch_xs, y:batch_ys})
+        sess.run(train_step, feed_dict={x: batch_xs, y_:batch_ys})
 
     # Evaluate
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
