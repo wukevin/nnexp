@@ -65,25 +65,23 @@ class ExpressionDataOneDimensional(object):
         self.index = 0
 
     def next_training_batch(self, n):
-        next_index = min(self.index + n, len(self.training_patients))
-        subsetted_patients = [x for x in self.training_patients[self.index:next_index]]
+        # next_index = min(self.index + n, len(self.training_patients))
+        # subsetted_patients = [x for x in self.training_patients[self.index:next_index]]
+        subsetted_patients = random.sample(self.training_patients, n)
         assert len(subsetted_patients) > 0
         subsetted_data = np.vstack([self.training_expression_vectors[x.barcode] for x in subsetted_patients])
         assert subsetted_data.shape[1] == self.per_obs_shape
-        # subsetted_data_tensor = tf.stack(subsetted_data)
         # Buidl the one-hot truth tensor
-        # onehot_tensor = tf.one_hot([self.accepted_key_values.index(x.clinical[self.key]) for x in subsetted_patients], 2)
         onehot = np.zeros((subsetted_data.shape[0], 2), dtype=np.float32)
         for index, x in enumerate(subsetted_patients):
             onehot[index][self.accepted_key_values.index(x.clinical[self.key])] = 1.0
         # Increment the index
-        self.index = (self.index + n) % len(self.training_patients)
+        # self.index = (self.index + n) % len(self.training_patients)
 
         return subsetted_data, onehot
 
     def testing_batch(self):
-        testing_data = np.concatenate([self.testing_expression_vectors[x.barcode] for x in self.testing_patients])
-        # onehot_tensor = [self.accepted_key_values.index(x.clinical[self.key]) for x in self.testing_patients]
+        testing_data = np.vstack([self.testing_expression_vectors[x.barcode] for x in self.testing_patients])
         onehot = np.zeros((testing_data.shape[0], 2), dtype=np.float32)
         for index, x in enumerate(self.testing_patients):
             onehot[index][self.accepted_key_values.index(x.clinical[self.key])] = 1.0
@@ -164,8 +162,8 @@ def softmax(patients):
     tf.global_variables_initializer().run()
 
     # Training
-    for _ in range(1000):
-        batch_xs, batch_ys = expression_data.next_training_batch(50)
+    for _ in tqdm.tqdm(range(2000)):
+        batch_xs, batch_ys = expression_data.next_training_batch(20)
         sess.run(train_step, feed_dict={x: batch_xs, y_:batch_ys})
 
     # Evaluate
