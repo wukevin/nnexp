@@ -79,11 +79,11 @@ def most_different_genes():
         for item in patient.cnv:
             print(item)
 
-def get_all_genomic_breakpoints():
+def get_all_genomic_breakpoints(datatypes=['rna', 'cnv']):
     """
     Gets all the genomic break points for each chromosome. These breakpoints are are union of the
-    breakpoints in all the datatypes (rna, cnv, protein). These breakpoints are used to split each
-    chromosome into discrete bins, such that each bin
+    breakpoints in all the datatypes given in the argment (possibilities: rna, cnv, protein). These
+    breakpoints are used to split each chromosome into discrete bins, such that each bin
     """
     pattern = os.path.join(
         tcga_parser.DATA_ROOT,
@@ -103,19 +103,27 @@ def get_all_genomic_breakpoints():
             patient = pickle.load(handle)
         assert isinstance(patient, tcga_parser.TcgaPatient)
         patients.append(patient)
-    
+
     # Figure out the breakpoints that we need to have every single thing line up
     chromosome_breakpoints = collections.defaultdict(sortedcontainers.SortedSet)
     for patient in patients:
         try:
-            rna_intervals = tcga_imaging.gene_to_interval(patient.gene_values(), ensembl_genes)
-            rna_intervals_sorted = {chromosome:tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in rna_intervals.items()}
-            protein_intervals = tcga_imaging.gene_to_interval(patient.prot_values(), ensembl_genes)
-            protein_intervals_sorted = {chromosome:tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in protein_intervals.items()}
-            cnv_intervals = patient.cnv_values()
-            cnv_intervals_sorted = {chromosome:tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in cnv_intervals.items()}
+            # This is List<Dictionary<Chromosome, IntervalTree>>
+            chromosome_breakpoints_per_patient = []
+            if 'rna' in datatypes:
+                rna_intervals = tcga_imaging.gene_to_interval(patient.gene_values(), ensembl_genes)
+                rna_intervals_sorted = {chromosome:tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in rna_intervals.items()}
+                chromosome_breakpoints_per_patient.append(rna_intervals_sorted)
+            if 'protein' in datatypes:
+                protein_intervals = tcga_imaging.gene_to_interval(patient.prot_values(), ensembl_genes)
+                protein_intervals_sorted = {chromosome:tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in protein_intervals.items()}
+                chromosome_breakpoints_per_patient.append(protein_intervals_sorted)
+            if 'cnv' in datatypes:
+                cnv_intervals = patient.cnv_values()
+                cnv_intervals_sorted = {chromosome:tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in cnv_intervals.items()}
+                chromosome_breakpoints_per_patient.append(cnv_intervals_sorted)
 
-            for sorted_interval_dict in [rna_intervals_sorted, protein_intervals_sorted, cnv_intervals_sorted]:
+            for sorted_interval_dict in chromosome_breakpoints_per_patient:
                 for chromosome, points in sorted_interval_dict.items():
                     for coord_set in points.keys():
                         chromosome_breakpoints[chromosome].add(coord_set[0])
@@ -186,9 +194,9 @@ def get_range_of_values():
 
 
 def main():
-    # get_all_genomic_breakpoints()
+    get_all_genomic_breakpoints()
     # get_range_of_values()
-    pass
+    # pass
 
 if __name__ == "__main__":
     main()
