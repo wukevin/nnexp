@@ -13,6 +13,9 @@ Notes to self:
    important. If we do this, we need to make sure that we are ordering pixels
    by their genomic coordinates such that areas that are close to each other
    end up getting grouped together, simulating the idea of an amplicon
+   * Conver gene expression data to a logarithmic scale. This should address the
+   fact that the gene expression data is on a completely different order of
+   magnitude than the CNV or RNASeq expression data
 """
 
 import os
@@ -293,14 +296,14 @@ def create_full_union_single_vector(patient, gene_intervals, breakpoints_file, r
         chr_cum_sum[chromosome] = sum([len(bps) for chrom, bps in breakpoints.items() if chrom < chromosome])
     # Create the template for the image that we are going to create
     height = 1
-    channels = 3 # RGB
+    channels = 2 # RGB
     dimensions = (height, width, channels)
     print(dimensions)
     img = np.zeros(dimensions, dtype=np.float32) # unsigned 8-bit integers are 0-255
     # We walk through the chromosomes
-    for channel_index, sorted_intervals in enumerate([cnv_intervals_sorted, rna_intervals_sorted, protein_intervals_sorted]):
+    # for channel_index, sorted_intervals in enumerate([cnv_intervals_sorted, rna_intervals_sorted, protein_intervals_sorted]):
+    for channel_index, sorted_intervals in enumerate([cnv_intervals_sorted, rna_intervals_sorted]):
         for chromosome in breakpoints.keys():
-            # Fill in CNV data on a scale of 0-255
             try:
                 values_for_chromosome = sorted_intervals[chromosome]
             except KeyError:
@@ -312,8 +315,12 @@ def create_full_union_single_vector(patient, gene_intervals, breakpoints_file, r
                     minimum, maximum = ranges['cnv']
                 elif channel_index == 1:
                     minimum, maximum = ranges['gene']
-                elif channel_index == 2:
-                    minimum, maximum = ranges['prot']
+                    # If it is gene data, convert it to a log scale to bring its order of magnitude
+                    # to a level similar to that of cnv/prot data
+                    minimum, maximum = np.log10(minimum + 1), np.log10(maximum + 1) # Convert to log
+                    value = np.log10(value + 1)
+                # elif channel_index == 2:
+                #     minimum, maximum = ranges['prot']
                 else:
                     raise ValueError("Unrecognized channel index: %i" % channel_index)
                 if not value_within_range(value, minimum, maximum):
@@ -333,11 +340,9 @@ def create_full_union_single_vector(patient, gene_intervals, breakpoints_file, r
     if not os.path.isdir(TENSORS_DIR):
         os.makedirs(TENSORS_DIR)
     array_file_path = os.path.join(TENSORS_DIR, "%s.expression.array" % patient.barcode)
-    # tensor = tf.stack(img, name=patient.barcode + "_expression_stack")
-    # print(tensor)
     with open(array_file_path, 'wb') as handle:
         pickle.dump(img, handle)
-    print("Generated %s in %f seconds" % (tensor_file_path, time.time() - start_time))
+    print("Generated %s in %f seconds" % (array_file_path, time.time() - start_time))
 
 ##### HERE ARE THE UTILITY FUNCTIONS FOR THEM #####
 
@@ -421,7 +426,7 @@ def main():
     #         os.path.join(tcga_analysis.RESULTS_DIR, "ranges.txt")
     #     )
     # Create the images in parallel
-    pool = multiprocessing.Pool(2)
+    pool = multiprocessing.Pool(4)
     # pool.map(functools.partial(create_image_full_union, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
     # pool.map(functools.partial(create_image_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
     pool.map(functools.partial(create_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)

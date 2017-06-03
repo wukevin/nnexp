@@ -16,12 +16,18 @@ import random
 import tcga_imaging
 import tcga_parser
 
+KEYS_OF_INTEREST = [
+    "er_status_by_ihc",
+    "pr_status_by_ihc"
+    "her2_status_by_ihc"
+]
+
 
 class ExpressionDataOneDimensional(object):
     """
     Class that returns the expresion data as a one-dimensional vector, in chunks
     """
-    def __init__(self, patients, save_for_testing=50, clinical_key="pr_status_by_ihc"):
+    def __init__(self, patients, save_for_testing=50, clinical_key="her2_status_by_ihc"):
         # Make sure the input is of the correct type
         assert all([isinstance(x, tcga_parser.TcgaPatient) for x in patients])
         # Filter out the list of inputted patients for any that do not have the given
@@ -33,7 +39,7 @@ class ExpressionDataOneDimensional(object):
         self.training_patients = patients[:-save_for_testing]
         self.testing_patients = patients[-save_for_testing:]
         # Load in the actual vectors
-        self.per_obs_shape = 328934 * 3 # Thsi represents the size of the flattened 2d array
+        self.per_obs_shape = 328934 * 2 # Thsi represents the size of the flattened 2d array
         # Locate and load in the patient vectors
         self.training_expression_vectors = {}
         for patient in self.training_patients:
@@ -99,19 +105,14 @@ def build_one_hot_encoding(patients):
 
     # Define which keys we're interested in, and that they are present
     # across all the patients
-    keys_of_interest = [
-        # "er_status_by_ihc",
-        "pr_status_by_ihc"
-        # "her2_status_by_ihc"
-    ]
-    for key in keys_of_interest:
-        for patient in patients:
-            assert key in patient.clinical
+    # for key in keys_of_interest:
+    #     for patient in patients:
+    #         assert key in patient.clinical
 
     allowed_values = ["Positive", "Negative"]
-    patients_filtered = [x for x in patients if x.clinical['pr_status_by_ihc'] in allowed_values]
+    patients_filtered = [x for x in patients if x.clinical['her2_status_by_ihc'] in allowed_values]
     # Build the matrix
-    onehot = tf.one_hot([allowed_values.index(x.clinical['pr_status_by_ihc']) for x in patients_filtered], 2)
+    onehot = tf.one_hot([allowed_values.index(x.clinical['her2_status_by_ihc']) for x in patients_filtered], 2)
     # For visually checking the one-hot vector
     # onehot_np = np.array(onehot.eval())
     # print(type(onehot_np))
@@ -145,7 +146,7 @@ def softmax(patients):
     sess = tf.InteractiveSession()
     # Make sure the tensors we use for data and for one-hot truth are of consistent/correct length
     expression_data = ExpressionDataOneDimensional(patients)
-    shape = 328934 * 3
+    shape = 328934 * 2
 
     x = tf.placeholder(tf.float32, [None, shape])
 
