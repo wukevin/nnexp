@@ -39,7 +39,7 @@ class ExpressionDataOneDimensional(object):
         self.training_patients = patients[:-save_for_testing]
         self.testing_patients = patients[-save_for_testing:]
         # Load in the actual vectors
-        self.per_obs_shape = 328934 * 2 # Thsi represents the size of the flattened 2d array
+        self.per_obs_shape = 15368 * 2 # Thsi represents the size of the flattened 2d array
         # Locate and load in the patient vectors
         self.training_expression_vectors = {}
         for patient in self.training_patients:
@@ -50,6 +50,7 @@ class ExpressionDataOneDimensional(object):
             assert os.path.isfile(np_array_location)
             with open(np_array_location, 'rb') as handle:
                 expression_array = pickle.load(handle)
+            # print(expression_array.shape)
             # Remove the first 1-dimension, maintianing a 2-dimensional array
             # expression_array = np.reshape(expression_array, expression_array.shape[1:])
             # Flatten the array to be one-dimensional
@@ -139,14 +140,14 @@ def max_pool_2x2(x):
 
 def softmax(patients):
     """
-    The dimension of each patient's input vector is (1, 328934, 3). Let's actually simplify this
-    to be just (328934, 3) instead
+    The dimension of each patient's input vector is (1, 15368, 3). Let's actually simplify this
+    to be just (15368, 3) instead
     This follows the pattern set forth at: https://www.tensorflow.org/get_started/mnist/pros
     """
     sess = tf.InteractiveSession()
     # Make sure the tensors we use for data and for one-hot truth are of consistent/correct length
     expression_data = ExpressionDataOneDimensional(patients)
-    shape = 328934 * 2
+    shape = 15368 * 2
 
     x = tf.placeholder(tf.float32, [None, shape])
 
