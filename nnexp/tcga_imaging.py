@@ -63,13 +63,14 @@ def value_within_range(value, minimum, maximum):
 def create_image_full_gene_intersection(patient):
     """
     Consumes a tcga patient and creates an image that is a composite of
-    only genes/positions that are completely within
+    only genes/positions that are completely within the domain covered by CNV and RNA
     """
     assert isinstance(patient, tcga_parser.TcgaPatient)
 
     # Only retain genes that are common to both genes and protein expression
     # data
-    common_genes = set(patient.gene_exp.keys()).intersection(set(patient.prot_exp.keys()))
+    # common_genes = set(patient.gene_exp.keys()).intersection(set(patient.prot_exp.keys()))
+    common_genes = set(patient.gene_exp.keys())
     print(len(common_genes)) # This is only 44...we may want to try something else
 
 
@@ -249,6 +250,66 @@ def create_image_full_union_single_vector(patient, gene_intervals, breakpoints_f
     print("Generated %s in %f seconds" % (image_path, time.time() - start_time))
 
 
+def create_gene_intersection_single_vector(patient, gene_intervals, genes_file, ranges_file):
+    """
+    Creates vectors of two rows, n columns where each column is a gene and each row is a datatype.
+    Datatypes include CNV data and RNA data. RNA data is log-transformed. Both CNV and RNA values
+    are reported as a percentage of their maximum value.
+    """
+    assert isinstance(patient, tcga_parser.TcgaPatient)
+    assert isinstance(gene_intervals, gtf_parser.Gtf)
+
+    start_time = time.time()
+    # Load in the genes we'll be using and make sure they're of consistent ordering
+    genes = sortedcontainers.SortedSet()
+    with open(genes_file, 'r') as handle:
+        for gene in handle:
+            gene = gene.rstrip()
+            genes.add(gene)
+    # Load in the ranges file
+    ranges = {}
+    with open(ranges_file, 'r') as handle:
+        for line in handle:
+            line = line.rstrip()
+            datatype, minimum, _null, maximum = line.split()
+            ranges[datatype] = (float(minimum), float(maximum))
+    rna_range = (np.log10(ranges['gene'][0] + 1), np.log10(ranges['gene'][1] + 1))
+    cnv_range = (ranges['cnv'][0], ranges['cnv'][1])
+    # 2 rows
+    shape = (2, len(genes))
+    # Instantiate the vector
+    vector = np.zeros(shape, dtype=np.float32)
+    cnv_intervals = patient.cnv_values()
+    rna_genes = patient.gene_values()
+
+    if cnv_intervals is None or rna_genes is None:
+        return # Don't generate anything
+
+    for gene in genes:
+        # Fill in CNV data
+        ensembl_entries = gene_intervals.get_gene_entries(gene)
+        ensembl_entry = sorted(ensembl_entries, key=lambda x: int(x['gene_version']))[-1]
+        start, stop = ensembl_entry['start'], ensembl_entry['stop']
+        overlapping_cnv_intervals = cnv_intervals[ensembl_entry['chromosome']][start:stop]
+        raw_cnv_value = np.median([x.data for x in overlapping_cnv_intervals])
+        assert cnv_range[0] <= raw_cnv_value <= cnv_range[1]
+        rel_cnv_value = (raw_cnv_value - cnv_range[0]) / (cnv_range[1] - cnv_range[0])
+        vector[0][genes.index(gene)] = rel_cnv_value
+        # Fill in RNA expression data
+        raw_rna_value = np.log10(rna_genes[gene] + 1)
+        assert rna_range[0] <= raw_rna_value <= rna_range[1]
+        rel_rna_value = (raw_rna_value - rna_range[0]) / (rna_range[1] - rna_range[0])
+        vector[1][genes.index(gene)] = rel_rna_value
+
+    print(vector)
+    print(vector.shape)
+    if not os.path.isdir(TENSORS_DIR):
+        os.makedirs(TENSORS_DIR)
+    array_file_path = os.path.join(TENSORS_DIR, "%s.expression.array" % patient.barcode)
+    with open(array_file_path, 'wb') as handle:
+        pickle.dump(vector, handle)
+    print("Generated %s in %f seconds" % (array_file_path, time.time() - start_time))
+
 def create_full_union_single_vector(patient, gene_intervals, breakpoints_file, ranges_file):
     """
     Uses every single value in the union of all the datatypes, much like the above function.
@@ -426,16 +487,16 @@ def main():
     #         os.path.join(tcga_analysis.RESULTS_DIR, "ranges.txt")
     #     )
     # Create the images in parallel
-    pool = multiprocessing.Pool(4)
+    pool = multiprocessing.Pool(6)
     # pool.map(functools.partial(create_image_full_union, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
     # pool.map(functools.partial(create_image_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
-    pool.map(functools.partial(create_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
-    
+    # pool.map(functools.partial(create_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
+    pool.map(functools.partial(create_gene_intersection_single_vector, gene_intervals=ensembl_genes, genes_file=tcga_analysis.COMMON_GENES_FILE, ranges_file = ranges_file), patients)
     # for patient in patients:
-    #     create_full_union_single_vector(
+    #     create_gene_intersection_single_vector(
     #         patient,
     #         ensembl_genes,
-    #         breakpoints_file,
+    #         tcga_analysis.COMMON_GENES_FILE,
     #         ranges_file
     #     )
 
