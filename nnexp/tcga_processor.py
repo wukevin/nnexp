@@ -5,6 +5,8 @@ then feed these objects into downstream functions to generate
 images based on the raw data, which are then fed into the neural net
 """
 import tcga_parser
+import gtf_parser
+import glob
 import time
 import os
 import pickle
@@ -26,6 +28,29 @@ def create_tcga_objects(biotab):
         tcga_objects[tcga_id].add_clinical_data(entry)
     return tcga_objects
 
+
+def load_tcga_objects(root=tcga_parser.DATA_ROOT):
+    """
+    Load in the TCGA objects from the default direcrtory
+    """
+    pattern = os.path.join(
+        root,
+        "tcga_patient_objects",
+        "TCGA*.pickled"
+    )
+    tcga_patient_files = glob.glob(pattern)
+    if len(tcga_patient_files) == 0:
+        raise RuntimeError("Found no files matching pattern:\n%s" % pattern)
+
+    # Load in all the patients
+    patients = []
+    for patient_file in tcga_patient_files:
+        with open(patient_file, 'rb') as handle:
+            patient = pickle.load(handle)
+        assert isinstance(patient, tcga_parser.TcgaPatient)
+        patients.append(patient)
+
+    return patients
 
 def main():
     """"""

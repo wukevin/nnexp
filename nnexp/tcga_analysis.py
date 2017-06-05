@@ -12,12 +12,18 @@ import collections
 import numpy as np
 
 import tcga_parser
+import tcga_processor
 import tcga_imaging
 import gtf_parser
 
 RESULTS_DIR = os.path.join(
     tcga_parser.DRIVE_ROOT,
     "results"
+)
+
+COMMON_GENES_FILE = os.path.join(
+    RESULTS_DIR,
+    "common_genes.txt"
 )
 
 def most_different_genes():
@@ -148,6 +154,51 @@ def get_all_genomic_breakpoints(datatypes=['rna', 'cnv']):
     print("Wrote breakpoint data to: %s" % breakpoints_output_file)
 
 
+def get_genes_intersection_cnv_rna():
+    """
+    Get the genes that are common between CNV datasets and RNA datasets
+    """
+    patients = tcga_processor.load_tcga_objects()
+    ensembl_genes = gtf_parser.Gtf(os.path.join(tcga_parser.DRIVE_ROOT, "Homo_sapiens.GRCh37.87.gtf"),
+                                   "gene", set(['ensembl_havana']))
+    cnv_breakpoints = collections.defaultdict(sortedcontainers.SortedSet)
+    rna_breakpoints = collections.defaultdict(sortedcontainers.SortedSet)
+
+    usable_gene_sets = []
+    for patient in patients:
+        try:
+            usable_genes = set()
+            cnv_intervals = patient.cnv_values()
+            cnv_intervals_sorted = {chromosome: tcga_imaging.interval_to_sorteddict(itree) for chromosome, itree in cnv_intervals.items()}
+            rna_expression = patient.gene_values()
+            for gene, expression_value in rna_expression.items():
+                # Get the coresponding intervals for that gene
+                # print(gene)
+                ensembl_entries = ensembl_genes.get_gene_entries(gene)
+                if not ensembl_entries:
+                    continue
+                ensembl_entry = sorted(ensembl_entries, key=lambda x: int(x['gene_version']))[-1]
+                start, stop = ensembl_entry['start'], ensembl_entry['stop']
+                # Find the NV intervals that overlap
+                overlapping_cnv_queries = cnv_intervals[ensembl_entry['chromosome']][start:stop]
+                if not overlapping_cnv_queries:
+                    continue
+                usable_genes.add(gene)
+            usable_gene_sets.append(usable_genes)
+        except AttributeError:
+            print("{0} Skipped due to attribute error".format(patient.barcode))
+    # Figure out the genes that are common to all
+    fully_common_genes = set()
+    for gene in usable_gene_sets[0]:
+        if all([gene in x for x in usable_gene_sets]):
+            fully_common_genes.add(gene)
+    # There are 15368 genes that are common to all
+    # Write them to a file so we can access them later on
+    print(len(fully_common_genes))
+    with open(COMMON_GENES_FILE, 'w') as handle:
+        for gene in fully_common_genes:
+            handle.write(gene + "\n")
+
 def get_range_of_values():
     """
     Gets the range of values (i.e. min and maximum value) within each datatype
@@ -194,7 +245,8 @@ def get_range_of_values():
 
 
 def main():
-    get_all_genomic_breakpoints()
+    # get_all_genomic_breakpoints()
+    get_genes_intersection_cnv_rna()
     # get_range_of_values()
     # pass
 
