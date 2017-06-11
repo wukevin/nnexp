@@ -450,6 +450,7 @@ def create_gene_intersection_dimensional_vector(patient, gene_intervals, genes_f
     array_file_path = os.path.join(TENSORS_DIR, "%s.expression.array" % patient.barcode)
     with open(array_file_path, 'wb') as handle:
         pickle.dump(vector, handle)
+    # The output of this is 16000 x 11        
     print("Generated %s in %f seconds" % (array_file_path, time.time() - start_time))
 
 def create_full_union_single_vector(patient, gene_intervals, breakpoints_file, ranges_file):
