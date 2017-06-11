@@ -21,6 +21,7 @@ Notes to self:
 import os
 import glob
 import pickle
+import itertools
 import intervaltree
 import sortedcontainers
 import collections
@@ -310,6 +311,147 @@ def create_gene_intersection_single_vector(patient, gene_intervals, genes_file, 
         pickle.dump(vector, handle)
     print("Generated %s in %f seconds" % (array_file_path, time.time() - start_time))
 
+
+def create_gene_intersection_dimensional_vector(patient, gene_intervals, genes_file, ranges_file):
+    """
+    Creates a 3-dimensional image where the vertical axis is chromosome, horizontal is genes, and
+    color channel is data type
+    """
+    assert isinstance(patient, tcga_parser.TcgaPatient)
+    assert isinstance(gene_intervals, gtf_parser.Gtf)
+
+    start_time = time.time()
+
+    # Load in the genes into a SortedDict<chromosome<SortedSet>>
+    genes_sort_by_chromosome = sortedcontainers.SortedDict()
+    with open(genes_file, 'r') as handle:
+        for line in handle:
+            gene = line.rstrip()
+            matching_ensembl_entries = gene_intervals.get_gene_entries(gene)
+            ensembl_entry = sorted(matching_ensembl_entries, key=lambda x: int(x['gene_version']))[-1]
+            chromosome, start, stop = ensembl_entry['chromosome'], ensembl_entry['start'], ensembl_entry['stop']
+            if chromosome not in genes_sort_by_chromosome:
+                genes_sort_by_chromosome[chromosome] = sortedcontainers.SortedList(key=lambda x: (x['start'], x['stop']))
+            genes_sort_by_chromosome[chromosome].add(ensembl_entry)
+    # In total, there are 15368 genes
+    # The largest per-chromosome set of genes has 1586 genes in it
+    # print(sum([len(x) for x in genes_sort_by_chromosome.values()]))
+    # print(max([len(x) for x in genes_sort_by_chromosome.values()]))
+
+    # Stack/pack the genes such that each row has approximately the same number of genes, and such
+    # that we minimize the amount of padding we need to do
+    chromosomes_by_increasing_size = sortedcontainers.SortedList(
+        [chrom for chrom in genes_sort_by_chromosome],
+        key=lambda x: len(genes_sort_by_chromosome[x])
+    )
+    num_chromosomes = len(chromosomes_by_increasing_size)
+    max_row_length = 1600  # Approximate size of the maximum row size that we want. This would get us about 10*16 under ideal packing
+    all_rows, this_row, row_lengths, this_row_length = [], [], [], 0
+    while chromosomes_by_increasing_size:  # While list still has elements in it
+        # print(chromosomes_by_increasing_size)
+        # print(list(itertools.chain.from_iterable(all_rows)) + this_row)
+        biggest_chrom = chromosomes_by_increasing_size.pop(-1)
+        big_size = len(genes_sort_by_chromosome[biggest_chrom])
+        try:  # The case where we still have two or more elements left to pop out
+            smallest_chrom = chromosomes_by_increasing_size.pop(0)
+            small_size = len(genes_sort_by_chromosome[smallest_chrom])
+            # Try in terms of ever decreasing size of extending the current list
+            if big_size + small_size + this_row_length < max_row_length:
+                this_row.append(biggest_chrom)
+                this_row.append(smallest_chrom)
+                this_row_length += big_size + small_size
+            elif big_size + this_row_length < max_row_length:
+                this_row.append(biggest_chrom)
+                chromosomes_by_increasing_size.add(smallest_chrom)
+                this_row_length += big_size
+            elif small_size + this_row_length < max_row_length:
+                this_row.append(smallest_chrom)
+                chromosomes_by_increasing_size.add(biggest_chrom)
+                this_row_length += small_size
+            else:
+                # We can no longer grow the current row - add it to all rows, and reset values
+                # also reinsert the two chromosomes back in
+                all_rows.append(this_row)
+                row_lengths.append(this_row_length)
+                this_row, this_row_length = [], 0  # Reset
+                chromosomes_by_increasing_size.append(biggest_chrom)  # Reinsert
+                chromosomes_by_increasing_size.insert(0, smallest_chrom)
+        except IndexError:  # There is one chromosome left - either add it to this row or add it to the next row
+            assert not chromosomes_by_increasing_size
+            if big_size + this_row_length < max_row_length:
+                this_row.append(chromosome)
+                this_row_length += big_size
+                all_rows.append(this_row)
+                row_lengths.append(this_row_length)
+            else:
+                # Add it to a new row
+                all_rows.append(this_row)
+                row_lengths.append(this_row_length)
+                all_rows.append([biggest_chrom])
+                row_lengths.append(big_size)
+    # If the current row being processed is not empty, append it
+    if this_row:# and this_row_length > 0:
+        all_rows.append(this_row)
+        row_lengths.append(this_row_length)
+    assert len(row_lengths) == len(all_rows)  # Make sure that our counters and our actual list of chromsomes stayed in sync
+    assert sum([len(x) for x in all_rows]) == num_chromosomes  # Make sure we didn't miss any chromosomes in the packing process
+
+    # Result of above looks like:
+    # ['chr1']
+    # ['chr19', 'chr21', 'chr18']
+    # ['chr2', 'chr13', 'chr22']
+    # ['chr11', 'chr20']
+    # ['chr3', 'chr15']
+    # ['chr17', 'chr14']
+    # ['chr12', 'chr8']
+    # ['chr6', 'chr16']
+    # ['chr7', 'chrX']
+    # ['chr5', 'chr4']
+    # ['chr10', 'chr9']
+
+    # Load in the ranges file
+    ranges = {}
+    with open(ranges_file, 'r') as handle:
+        for line in handle:
+            line = line.rstrip()
+            datatype, minimum, _null, maximum = line.split()
+            ranges[datatype] = (float(minimum), float(maximum))
+    rna_range = (np.log10(ranges['gene'][0] + 1), np.log10(ranges['gene'][1] + 1))
+    cnv_range = (ranges['cnv'][0], ranges['cnv'][1])
+
+    shape = (len(all_rows), max_row_length, 2)  # height, width, channels
+    cnv_intervals = patient.cnv_values()
+    rna_genes = patient.gene_values()
+    if cnv_intervals is None or rna_genes is None:
+        return # Don't generate anything
+    # Instantiate the vector
+    vector = np.zeros(shape, dtype=np.float32)
+    for chromosome, genes in genes_sort_by_chromosome.items():
+        row_index = [i for i, row in enumerate(all_rows) if chromosome in row][0]
+        col_index = 0
+        for ensembl_entry in genes:
+            gene = ensembl_entry['gene_name']
+            start, stop = ensembl_entry['start'], ensembl_entry['stop']
+            overlapping_cnv_intervals = cnv_intervals[ensembl_entry['chromosome']][start:stop]
+            raw_cnv_value = np.median([x.data for x in overlapping_cnv_intervals])
+            assert cnv_range[0] <= raw_cnv_value <= cnv_range[1]
+            rel_cnv_value = (raw_cnv_value - cnv_range[0]) / (cnv_range[1] - cnv_range[0])
+            vector[row_index][col_index][0] = rel_cnv_value
+            # Fill in RNA expression data
+            raw_rna_value = np.log10(rna_genes[gene] + 1)
+            assert rna_range[0] <= raw_rna_value <= rna_range[1]
+            rel_rna_value = (raw_rna_value - rna_range[0]) / (rna_range[1] - rna_range[0])
+            vector[row_index][col_index][1] = rel_rna_value
+            col_index += 1
+    # print(vector)
+    print(vector.shape)
+    if not os.path.isdir(TENSORS_DIR):
+        os.makedirs(TENSORS_DIR)
+    array_file_path = os.path.join(TENSORS_DIR, "%s.expression.array" % patient.barcode)
+    with open(array_file_path, 'wb') as handle:
+        pickle.dump(vector, handle)
+    print("Generated %s in %f seconds" % (array_file_path, time.time() - start_time))
+
 def create_full_union_single_vector(patient, gene_intervals, breakpoints_file, ranges_file):
     """
     Uses every single value in the union of all the datatypes, much like the above function.
@@ -491,7 +633,9 @@ def main():
     # pool.map(functools.partial(create_image_full_union, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
     # pool.map(functools.partial(create_image_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
     # pool.map(functools.partial(create_full_union_single_vector, gene_intervals=ensembl_genes, breakpoints_file=breakpoints_file, ranges_file=ranges_file), patients)
-    pool.map(functools.partial(create_gene_intersection_single_vector, gene_intervals=ensembl_genes, genes_file=tcga_analysis.COMMON_GENES_FILE, ranges_file = ranges_file), patients)
+    # pool.map(functools.partial(create_gene_intersection_single_vector, gene_intervals=ensembl_genes, genes_file=tcga_analysis.COMMON_GENES_FILE, ranges_file = ranges_file), patients)
+    pool.map(functools.partial(create_gene_intersection_dimensional_vector, gene_intervals=ensembl_genes,
+                               genes_file=tcga_analysis.COMMON_GENES_FILE, ranges_file=ranges_file), patients)
     # for patient in patients:
     #     create_gene_intersection_single_vector(
     #         patient,
