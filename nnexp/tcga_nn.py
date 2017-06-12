@@ -96,6 +96,71 @@ class ExpressionDataOneDimensional(object):
         return testing_data, onehot
 
 
+class ExpressionDataThreeDimensional(object):
+    """
+    Derivative of the above function that, instead of dealing with one dimensional vectors,
+    deals in three dimensions
+    """
+    def __init__(self, patients, save_for_testing=50, clinical_key="her2_status_by_ihc"):
+        self.key = clinical_key
+        self.accepted_key_values = ["Negative", "Positive"]
+        self.all_patients = [x for x in patients if self.key in x.clinical and x.clinical[self.key] in self.accepted_key_values]
+        # Partition data into training and testing datasets
+        self.training_patients = patients[:-save_for_testing]
+        self.testing_patients = patients[-save_for_testing:]
+        # Load in the actual vectors
+        self.per_obs_shape = (11, 1600, 2)  # The size of the 3D array
+        # Locate and load in the patient vectors
+        self.training_expression_vectors = {}
+        for patient in self.training_patients:
+            np_array_location = os.path.join(
+                tcga_imaging.TENSORS_DIR, "{0}.expression.array".format(patient.barcode)
+            )
+            assert os.path.isfile(np_array_location)
+            with open(np_array_location, 'rb') as handle:
+                expression_array = pickle.load(handle)
+            assert expression_array.shape == self.per_obs_shape
+            self.training_expression_vectors[patient.barcode] = expression_array
+        # ... and the training patient expression vectors
+        self.testing_expression_vectors = {}
+        for patient in self.testing_patients:
+            np_array_location = os.path.join(
+                tcga_imaging.TENSORS_DIR, "%s.expression.array" % patient.barcode
+            )
+            with open(np_array_location, 'rb') as handle:
+                expression_array = pickle.load(handle)
+            assert expression_array.shape == self.per_obs_shape
+            self.testing_expression_vectors[patient.barcode] = expression_array
+
+        self.index = 0
+
+    def next_training_batch(self, n=50):
+        # next_index = min(self.index + n, len(self.training_patients))
+        # subsetted_patients = [x for x in self.training_patients[self.index:next_index]]
+        subsetted_patients = random.sample(self.training_patients, n)
+        assert subsetted_patients
+        subsetted_data = np.vstack([self.training_expression_vectors[x.barcode] for x in subsetted_patients])
+        print(subsetted_data)
+        print(subsetted_data.size)
+        # Build the one-hot truth tensor
+        onehot = np.zeros((subsetted_data.shape[0], 2), dtype=np.float32)
+        for index, x in enumerate(subsetted_patients):
+            onehot[index][self.accepted_key_values.index(x.clinical[self.key])] = 1.0
+        # Increment the index
+        # self.index = (self.index + n) % len(self.training_patients)
+
+        return subsetted_data, onehot
+
+    def testing_batch(self):
+        testing_data = np.vstack([self.testing_expression_vectors[x.barcode] for x in self.testing_patients])
+        onehot = np.zeros((testing_data.shape[0], 2), dtype=np.float32)
+        for index, x in enumerate(self.testing_patients):
+            onehot[index][self.accepted_key_values.index(x.clinical[self.key])] = 1.0
+
+        return testing_data, onehot
+
+
+
 def build_one_hot_encoding(patients):
     """
     Builds a one-hot encoding table for the given list of patients
@@ -137,6 +202,13 @@ def conv2d(x, W):
 
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+
+def multilayer_cnn(patients):
+    """
+    """
+    # sess = tf.InteractiveSession()
+    expression_data = ExpressionDataThreeDimensional(patients)
+    expression_data.next_training_batch()
 
 def softmax(patients):
     """
@@ -195,7 +267,8 @@ def main():
     # Build the one-hot encoding table, and determine whcih of the patients this table represents
     onehot_tensor, patients_filtered = build_one_hot_encoding(patients)
 
-    softmax(patients_filtered)
+    # softmax(patients_filtered)
+    multilayer_cnn(patients_filtered)
 
 if __name__ == "__main__":
     main()
