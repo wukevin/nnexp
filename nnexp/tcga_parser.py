@@ -5,6 +5,7 @@ set of commands for easily parsing data
 """
 import os
 import sys
+import platform
 import glob
 import re
 import xml
@@ -22,7 +23,10 @@ import numpy as np
 if sys.platform == 'win32' or sys.platform == "win64":
     DRIVE_ROOT = "E:\\"
 elif sys.platform == "linux2" or sys.platform == "linux":
-    DRIVE_ROOT = "/mnt/e/"
+    if platform.node() == "kevin-desktop-ubuntu":
+        DRIVE_ROOT = "/media/kevin/Genomics"  # For native ubuntu desktop installation
+    else:
+        DRIVE_ROOT = "/mnt/e/"  # For Ubuntu on Windows Subsystem on Linux
 elif sys.platform == "darwin":
     DRIVE_ROOT = "/Volumes/Data"
 else:

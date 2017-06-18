@@ -11,7 +11,6 @@ import sortedcontainers
 import numpy as np
 import tqdm
 import random
-# np.set_printoptions(threshold=np.inf)
 
 import tcga_imaging
 import tcga_parser
@@ -21,7 +20,6 @@ KEYS_OF_INTEREST = [
     "pr_status_by_ihc"
     "her2_status_by_ihc"
 ]
-
 
 class ExpressionDataOneDimensional(object):
     """
