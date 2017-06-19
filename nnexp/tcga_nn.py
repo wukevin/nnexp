@@ -11,6 +11,7 @@ import sortedcontainers
 import numpy as np
 import tqdm
 import random
+import time
 
 import tcga_imaging
 import tcga_parser
@@ -133,13 +134,18 @@ class ExpressionDataThreeDimensional(object):
         self.index = 0
 
     def next_training_batch(self, n=50):
+        """
+        Returns the next batch of data, reshaped into a stright 1-dimensional vector. We will re-format this into
+        a 3 dimensional vector again later
+        """
         # next_index = min(self.index + n, len(self.training_patients))
         # subsetted_patients = [x for x in self.training_patients[self.index:next_index]]
         subsetted_patients = random.sample(self.training_patients, n)
         assert subsetted_patients
-        subsetted_data = np.vstack([self.training_expression_vectors[x.barcode] for x in subsetted_patients])
-        print(subsetted_data)
-        print(subsetted_data.size)
+        # for patient in subsetted_patients:  # Make sure that reshaping works properly
+        #     test = self.training_expression_vectors[patient.barcode].flatten()
+        #     assert np.array_equal(np.reshape(test, (11, 1600, 2)), self.training_expression_vectors[patient.barcode])  # Make sure that reshape works correctly
+        subsetted_data = np.vstack([self.training_expression_vectors[x.barcode].flatten() for x in subsetted_patients])
         # Build the one-hot truth tensor
         onehot = np.zeros((subsetted_data.shape[0], 2), dtype=np.float32)
         for index, x in enumerate(subsetted_patients):
@@ -150,7 +156,7 @@ class ExpressionDataThreeDimensional(object):
         return subsetted_data, onehot
 
     def testing_batch(self):
-        testing_data = np.vstack([self.testing_expression_vectors[x.barcode] for x in self.testing_patients])
+        testing_data = np.vstack([self.testing_expression_vectors[x.barcode].flatten() for x in self.testing_patients])
         onehot = np.zeros((testing_data.shape[0], 2), dtype=np.float32)
         for index, x in enumerate(self.testing_patients):
             onehot[index][self.accepted_key_values.index(x.clinical[self.key])] = 1.0
@@ -199,14 +205,65 @@ def conv2d(x, W):
     return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
 
 def max_pool_2x2(x):
-    return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')
+    return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')  # ksize is batch size, height, width, num channels
 
 def multilayer_cnn(patients):
     """
+    Dimension of the data is (11, 1600, 2)
     """
-    # sess = tf.InteractiveSession()
+    sess = tf.InteractiveSession()
     expression_data = ExpressionDataThreeDimensional(patients)
-    expression_data.next_training_batch()
+    x = tf.placeholder(tf.float32, [None, 11 * 1600 * 2])
+    y_ = tf.placeholder(tf.float32, [None, 2])
+    x_image = tf.reshape(x, [-1, 11, 1600, 2])  # Reshape it back to the image that we want
+
+    # First convolutional layer.
+    first_num_features = 8
+    W_conv1 = weight_variable([1, 1, 2, first_num_features]) # first two are patch size, then input channels, then number of output features
+    b_conv1 = bias_variable([first_num_features])
+    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)  # The output of this is a 11x1600x8 (8 channels from the original 2)
+    h_pool1 = tf.nn.max_pool(h_conv1, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='SAME')  # Reduces to 10 x 1600 x 8
+
+    # Second covnolutional layer
+    second_num_features = 64
+    W_conv2 = weight_variable([10, 10, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
+    b_conv2 = bias_variable([second_num_features])
+    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+    h_pool2 = tf.nn.max_pool(h_conv2, ksize=[1, 5, 5, 1], strides = [1, 5, 5, 1], padding='SAME')  # Reduces to 2 * 320 * second_num_features
+
+    # Densely connected layer
+    dense_num_features = 2048
+    W_fc1 = weight_variable([2 * 320 * second_num_features, dense_num_features])
+    b_fc1 = bias_variable([dense_num_features])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, 2 * 320 * second_num_features])
+    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+
+    # Dropout
+    keep_prob = tf.placeholder(tf.float32)
+    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+
+    # Readout
+    W_fc2 = weight_variable([dense_num_features, 2])
+    b_fc2 = bias_variable([2])
+    y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+
+    # Run
+    cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
+    train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
+    correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
+    accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    sess.run(tf.global_variables_initializer())
+    last_recorded_time = time.time()
+    for i in range(20000):
+        batch_xs, batch_ys = expression_data.next_training_batch(30)
+        if i % 100 == 0 and i > 0:
+            train_accuracy = accuracy.eval(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 1.0})
+            print("step %d, training accuracy %g, %f seconds" % (i, train_accuracy, time.time() - last_recorded_time))
+            last_recorded_time = time.time()
+        train_step.run(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 0.5})
+
+    test_data, test_truth = expression_data.testing_batch()
+    print("test accuracy %g"%accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0}))
 
 def softmax(patients):
     """
