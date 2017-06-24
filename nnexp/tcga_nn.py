@@ -254,7 +254,7 @@ def multilayer_cnn(patients):
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     sess.run(tf.global_variables_initializer())
     last_recorded_time = time.time()
-    for i in range(20000):
+    for i in range(5000):
         batch_xs, batch_ys = expression_data.next_training_batch(30)
         if i % 100 == 0 and i > 0:
             train_accuracy = accuracy.eval(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 1.0})
