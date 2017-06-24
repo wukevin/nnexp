@@ -100,13 +100,13 @@ class ExpressionDataThreeDimensional(object):
     Derivative of the above function that, instead of dealing with one dimensional vectors,
     deals in three dimensions
     """
-    def __init__(self, patients, save_for_testing=50, clinical_key="her2_status_by_ihc"):
+    def __init__(self, patients, save_for_testing=50, start_of_testing=0, clinical_key="her2_status_by_ihc"):
         self.key = clinical_key
         self.accepted_key_values = ["Negative", "Positive"]
         self.all_patients = [x for x in patients if self.key in x.clinical and x.clinical[self.key] in self.accepted_key_values]
         # Partition data into training and testing datasets
-        self.training_patients = patients[:-save_for_testing]
-        self.testing_patients = patients[-save_for_testing:]
+        self.testing_patients = patients[start_of_testing:save_for_testing+start_of_testing]
+        self.training_patients = [x for x in patients if x not in self.testing_patients]
         # Load in the actual vectors
         self.per_obs_shape = (11, 1600, 2)  # The size of the 3D array
         # Locate and load in the patient vectors
@@ -212,7 +212,6 @@ def multilayer_cnn(patients):
     Dimension of the data is (11, 1600, 2)
     """
     sess = tf.InteractiveSession()
-    expression_data = ExpressionDataThreeDimensional(patients)
     x = tf.placeholder(tf.float32, [None, 11 * 1600 * 2])
     y_ = tf.placeholder(tf.float32, [None, 2])
     x_image = tf.reshape(x, [-1, 11, 1600, 2])  # Reshape it back to the image that we want
@@ -254,16 +253,18 @@ def multilayer_cnn(patients):
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     sess.run(tf.global_variables_initializer())
     last_recorded_time = time.time()
-    for i in range(5000):
-        batch_xs, batch_ys = expression_data.next_training_batch(30)
-        if i % 100 == 0 and i > 0:
-            train_accuracy = accuracy.eval(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 1.0})
-            print("step %d, training accuracy %g, %f seconds" % (i, train_accuracy, time.time() - last_recorded_time))
-            last_recorded_time = time.time()
-        train_step.run(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 0.5})
+    for i in range(10):
+        expression_data = ExpressionDataThreeDimensional(patients, save_for_testing=50, start_of_testing=50*i)
+        for i in tqdm.tqdm(range(5000)):
+            batch_xs, batch_ys = expression_data.next_training_batch(30)
+            # if i % 100 == 0 and i > 0:
+            #     train_accuracy = accuracy.eval(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 1.0})
+            #     print("step %d, training accuracy %g, %f seconds" % (i, train_accuracy, time.time() - last_recorded_time))
+            #     last_recorded_time = time.time()
+            train_step.run(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 0.5})
 
-    test_data, test_truth = expression_data.testing_batch()
-    print("test accuracy %g"%accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0}))
+        test_data, test_truth = expression_data.testing_batch()
+        print("test accuracy %g"%accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0}))
 
 def softmax(patients):
     """
