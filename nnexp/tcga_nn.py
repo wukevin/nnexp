@@ -13,8 +13,11 @@ import tqdm
 import random
 import time
 
+import argparse
+
 import tcga_imaging
 import tcga_parser
+import tcga_processor
 
 KEYS_OF_INTEREST = [
     "er_status_by_ihc",
@@ -207,7 +210,7 @@ def conv2d(x, W):
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')  # ksize is batch size, height, width, num channels
 
-def multilayer_cnn(patients):
+def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size=25):
     """
     Dimension of the data is (11, 1600, 2)
     """
@@ -252,25 +255,28 @@ def multilayer_cnn(patients):
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
     # Run
-    logfile = open("cnn.log", 'w')
-    testing_batch_size = 40
-    k_validations = round(len(patients) / testing_batch_size)
-    for k in range(k_validations):
-        print("{0} of {1} cross validation steps".format(k, k_validations))
-        expression_data = ExpressionDataThreeDimensional(patients, save_for_testing=testing_batch_size, start_of_testing=testing_batch_size*k)
-        sess.run(tf.global_variables_initializer())
-        for _i in tqdm.tqdm(range(5000)):
-            batch_xs, batch_ys = expression_data.next_training_batch(25)
-            # if i % 100 == 0 and i > 0:
-            #     train_accuracy = accuracy.eval(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 1.0})
-            #     print("step %d, training accuracy %g, %f seconds" % (i, train_accuracy, time.time() - last_recorded_time))
-            #     last_recorded_time = time.time()
-            train_step.run(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 0.5})
+    logfile = open("cnn.{0}.log".format(kth), 'w')
+    # testing_batch_size = 40
+    # k_validations = round(len(patients) / testing_batch_size)
+    # for k in range(k_validations):
+        # print("{0} of {1} cross validation steps".format(k, k_validations))
+    expression_data = ExpressionDataThreeDimensional(patients, save_for_testing=ksize, start_of_testing=ksize*kth)
+    sess.run(tf.global_variables_initializer())
+    for _i in range(training_iters):
+        batch_xs, batch_ys = expression_data.next_training_batch(training_size)
+        if _i % 100 == 0:
+            train_accuracy = accuracy.eval(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 1.0})
+            status_update = "step %d, training accuracy %g" % (_i, train_accuracy)
+            logfile.write(status_update + "\n")
+            print(status_update)
+        train_step.run(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 0.5})
 
-        test_data, test_truth = expression_data.testing_batch()
-        stepwise_accuracy = accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
-        print("test accuracy %g" % stepwise_accuracy)
-        logfile.write("cross validation step {0} of {1}: {2}\n".format(k, k_validations, stepwise_accuracy))
+    test_data, test_truth = expression_data.testing_batch()
+    final_accuracy = accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
+    status_update = "final test accuracy: %g" % final_accuracy
+    print("test accuracy %g" % final_accuracy)
+    logfile.write(status_update + "\n")
+    logfile.close()  # Close the filehandle
 
 def softmax(patients):
     """
@@ -309,28 +315,36 @@ def softmax(patients):
     test_data, test_truth = expression_data.testing_batch()
     print(sess.run(accuracy, feed_dict={x: test_data, y_: test_truth}))
 
+
+def build_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
+    parser.add_argument("--size", type=int, default=50, help="Size of the blocks for truth sets")
+    parser.add_argument("--iter", type=int, default=5000, help="Number of training iterations to run")
+    parser.add_argument("--itersize", type=int, default=25, help="Number of samples to run per training iteration")
+    return parser
+
+
 def main():
     """
     """
+    parser = build_parser()
+    args = parser.parse_args()
+
     # Locate and load in the pickled patient records and the images
-    patient_files = glob.glob(os.path.join(tcga_parser.DATA_ROOT, "tcga_patient_objects", "TCGA*.pickled"))
-    assert len(patient_files) > 0
-    patients = []
-    for pickled_object in patient_files:
-        with open(pickled_object, 'rb') as handle:
-            patients.append(pickle.load(handle))
-    images = glob.glob(os.path.join(tcga_imaging.IMAGES_DIR, "*.png"))
+    patients = tcga_processor.load_tcga_objects()
+    images = glob.glob(os.path.join(tcga_imaging.TENSORS_DIR, "*.expression.array"))
     barcodes_with_images = sortedcontainers.SortedSet([re.findall(tcga_parser.TCGA_BARCODE_REGEX, os.path.basename(x))[0] for x in images])
     # Filter the list of patients by those which we have images for and sort them
     # by alphebetical ordering of their barcodes
     patients = sortedcontainers.SortedList([x for x in patients if x.barcode in barcodes_with_images], key=lambda x: x.barcode)
-    assert len(patients) > 0
+    assert patients  # Make sure the patients list is not empty
 
     # Build the one-hot encoding table, and determine whcih of the patients this table represents
     onehot_tensor, patients_filtered = build_one_hot_encoding(patients)
 
     # softmax(patients_filtered)
-    multilayer_cnn(patients_filtered)
+    multilayer_cnn(patients_filtered, args.kth, args.size)
 
 if __name__ == "__main__":
     main()
