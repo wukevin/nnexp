@@ -253,6 +253,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+    num_correct = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))  # Number of things correct
 
     # Run
     logfile = open("cnn.{0}.log".format(kth), 'w')
@@ -273,8 +274,9 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
 
     test_data, test_truth = expression_data.testing_batch()
     final_accuracy = accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
-    status_update = "final test accuracy: %g" % final_accuracy
-    print("test accuracy %g" % final_accuracy)
+    final_num_right = num_correct.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
+    status_update = "final test accuracy: %g - %i / %i" % (final_accuracy, final_num_right, len(expression_data.testing_patients))
+    print(status_update)
     logfile.write(status_update + "\n")
     logfile.close()  # Close the filehandle
 
