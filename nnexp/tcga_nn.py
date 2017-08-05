@@ -320,10 +320,10 @@ def softmax(patients):
 
 def build_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
-    parser.add_argument("--size", type=int, default=50, help="Size of the blocks for truth sets")
-    parser.add_argument("--iter", type=int, default=5000, help="Number of training iterations to run")
-    parser.add_argument("--itersize", type=int, default=25, help="Number of samples to run per training iteration")
+    parser.add_argument("-k", "--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
+    parser.add_argument("-s", "--size", type=int, default=50, help="Size of the blocks for truth sets")
+    parser.add_argument("-i", "--iter", type=int, default=5000, help="Number of training iterations to run")
+    parser.add_argument("-n", "--itersize", type=int, default=25, help="Number of samples to run per training iteration")
     return parser
 
 
