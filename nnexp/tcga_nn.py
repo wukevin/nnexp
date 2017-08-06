@@ -230,13 +230,13 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     h_pool1 = tf.nn.max_pool(h_conv1, ksize=[1, 2, 1, 1], strides=[1, 1, 1, 1], padding='VALID')  # Reduces to 10 x 1600 x 8
     print("Pooled first layer:", h_pool1.get_shape())  # (?, 10, 1600, first_num_features)
 
-    # Second covnolutional layer
-    second_num_features = 8
-    second_patch_height, second_patch_width = 1, 8
+    # Second convolutional layer
+    second_num_features = 20
+    second_patch_height, second_patch_width = 1, 32
     W_conv2 = weight_variable([second_patch_height, second_patch_width, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
     b_conv2 = bias_variable([second_num_features])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    second_pool_window = 4 # Originally 5
+    second_pool_window = 8 # Originally 5
     # Reduce from 10x1600xfirst_num_features to be 1600 / second_pool_window long
     h_pool2 = tf.nn.max_pool(
         h_conv2,
