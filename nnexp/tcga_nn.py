@@ -221,7 +221,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
 
     # First convolutional layer.
     # Start with a 1x1 convolution, https://iamaaditya.github.io/2016/03/one-by-one-convolution/
-    first_num_features = 4
+    first_num_features = 6
     W_conv1 = weight_variable([1, 1, 2, first_num_features]) # first two are patch size, then input channels, then number of output features
     b_conv1 = bias_variable([first_num_features])  # There is a bias for every output channel
     h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)  # The output of this is a 11x1600xnum_features (n channels from the original 2)
@@ -231,7 +231,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     print("Pooled first layer:", h_pool1.get_shape())  # (?, 10, 1600, first_num_features)
 
     # Second convolutional layer
-    second_num_features = 20
+    second_num_features = 24
     second_patch_height, second_patch_width = 1, 32
     W_conv2 = weight_variable([second_patch_height, second_patch_width, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
     b_conv2 = bias_variable([second_num_features])
@@ -247,7 +247,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
 
     # Densely connected layer
-    dense_num_features = 4096
+    dense_num_features = 5000 # previously 4096
     flattened = int(10 * 1600 / second_pool_window * second_num_features)
     W_fc1 = weight_variable([flattened, dense_num_features])
     b_fc1 = bias_variable([dense_num_features])
