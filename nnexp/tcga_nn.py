@@ -204,8 +204,8 @@ def bias_variable(shape):
     initial = tf.constant(0.1, shape=shape)
     return tf.Variable(initial)
 
-def conv2d(x, W):
-    return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
+def conv2d(x, W, strides=[1,1,1,1], pad="SAME"):
+    return tf.nn.conv2d(x, W, strides=strides, padding=pad)
 
 def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME')  # ksize is batch size, height, width, num channels
@@ -220,24 +220,38 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     x_image = tf.reshape(x, [-1, 11, 1600, 2])  # Reshape it back to the image that we want
 
     # First convolutional layer.
-    first_num_features = 8
+    # Start with a 1x1 convolution, https://iamaaditya.github.io/2016/03/one-by-one-convolution/
+    first_num_features = 4
     W_conv1 = weight_variable([1, 1, 2, first_num_features]) # first two are patch size, then input channels, then number of output features
-    b_conv1 = bias_variable([first_num_features])
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)  # The output of this is a 11x1600x8 (8 channels from the original 2)
-    h_pool1 = tf.nn.max_pool(h_conv1, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='SAME')  # Reduces to 10 x 1600 x 8
+    b_conv1 = bias_variable([first_num_features])  # There is a bias for every output channel
+    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)  # The output of this is a 11x1600xnum_features (n channels from the original 2)
+    # ksize is [batch, height, width, channels]
+    # This pooling is mostly to just even out the dimensions to be a pretty 10 x 1600 x num_features
+    h_pool1 = tf.nn.max_pool(h_conv1, ksize=[1, 2, 1, 1], strides=[1, 1, 1, 1], padding='VALID')  # Reduces to 10 x 1600 x 8
+    print("Pooled first layer:", h_pool1.get_shape())  # (?, 10, 1600, first_num_features)
 
     # Second covnolutional layer
-    second_num_features = 64
-    W_conv2 = weight_variable([10, 10, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
+    second_num_features = 8
+    second_patch_height, second_patch_width = 1, 8
+    W_conv2 = weight_variable([second_patch_height, second_patch_width, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
     b_conv2 = bias_variable([second_num_features])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    h_pool2 = tf.nn.max_pool(h_conv2, ksize=[1, 5, 5, 1], strides = [1, 5, 5, 1], padding='SAME')  # Reduces to 2 * 320 * second_num_features
+    second_pool_window = 4 # Originally 5
+    # Reduce from 10x1600xfirst_num_features to be 1600 / second_pool_window long
+    h_pool2 = tf.nn.max_pool(
+        h_conv2,
+        ksize=[1, 1, second_pool_window, 1],
+        strides = [1, 1, second_pool_window, 1],
+        padding='SAME'
+    )
+    print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
 
     # Densely connected layer
-    dense_num_features = 2048
-    W_fc1 = weight_variable([2 * 320 * second_num_features, dense_num_features])
+    dense_num_features = 4096
+    flattened = int(10 * 1600 / second_pool_window * second_num_features)
+    W_fc1 = weight_variable([flattened, dense_num_features])
     b_fc1 = bias_variable([dense_num_features])
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 2 * 320 * second_num_features])
+    h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
     h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
     # Dropout
@@ -273,10 +287,20 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
         train_step.run(feed_dict={x: batch_xs, y_: batch_ys, keep_prob: 0.5})
 
     test_data, test_truth = expression_data.testing_batch()
-    final_accuracy = accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
-    final_num_right = num_correct.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
-    status_update = "final test accuracy: %g - %i / %i" % (final_accuracy, final_num_right, len(expression_data.testing_patients))
+    num_right = 0
+    for test_data_single, test_truth_single, test_patient in zip(test_data, test_truth, expression_data.testing_patients):
+        acc = accuracy.eval(feed_dict={x: [test_data_single], y_: [test_truth_single], keep_prob: 1.0})
+        print(test_patient.barcode, test_patient.clinical['her2_status_by_ihc'], acc)
+        num_right += 1 if int(acc) == 1 else 0
+    # final_accuracy = accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
+    # final_num_right = num_correct.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
+    final_accuracy = num_right / len(expression_data.testing_patients)
+    status_update = "final test accuracy: %g - %i / %i" % (final_accuracy, num_right, len(expression_data.testing_patients))    
     print(status_update)
+    # print(correct_prediction.eval())
+    # print out a breakdown
+    # for truth, prediction in zip(test_truth, correct_prediction.eval()):
+    #     print(truth, prediction)
     logfile.write(status_update + "\n")
     logfile.close()  # Close the filehandle
 
@@ -346,7 +370,7 @@ def main():
     onehot_tensor, patients_filtered = build_one_hot_encoding(patients)
 
     # softmax(patients_filtered)
-    multilayer_cnn(patients_filtered, args.kth, args.size)
+    multilayer_cnn(patients_filtered, args.kth, args.size, training_iters=args.iter, training_size=args.itersize)
 
 if __name__ == "__main__":
     main()
