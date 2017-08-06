@@ -266,7 +266,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
     # A learning rate of 1e-4 seems to cause us to never really converge on a good solution
     # the default value (1e-3?) (with 1100 trainign iterations) seems to work well
-    train_step = tf.train.AdamOptimizer().minimize(cross_entropy)
+    train_step = tf.train.AdamOptimizer(5e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     num_correct = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))  # Number of things correct
