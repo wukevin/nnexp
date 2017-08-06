@@ -4,12 +4,14 @@ Processes TCGA data to produces the raw TCGA patient objects. We
 then feed these objects into downstream functions to generate
 images based on the raw data, which are then fed into the neural net
 """
-import tcga_parser
-import gtf_parser
+import multiprocessing
 import glob
 import time
 import os
 import pickle
+
+import tcga_parser
+import gtf_parser
 
 def create_tcga_objects(biotab):
     """
@@ -28,8 +30,14 @@ def create_tcga_objects(biotab):
         tcga_objects[tcga_id].add_clinical_data(entry)
     return tcga_objects
 
+def _patient_loader(filepath):
+    """Helper function for loading pickled patient objects"""
+    with open(filepath, 'rb') as handle:
+        patient = pickle.load(handle)
+    assert isinstance(patient, tcga_parser.TcgaPatient)
+    return patient
 
-def load_tcga_objects(root=tcga_parser.DATA_ROOT):
+def load_tcga_objects(root=tcga_parser.DATA_ROOT, threads=8):
     """
     Load in the TCGA objects from the default direcrtory
     """
@@ -39,17 +47,11 @@ def load_tcga_objects(root=tcga_parser.DATA_ROOT):
         "TCGA*.pickled"
     )
     tcga_patient_files = glob.glob(pattern)
-    if len(tcga_patient_files) == 0:
+    if not tcga_patient_files:
         raise RuntimeError("Found no files matching pattern:\n%s" % pattern)
-
     # Load in all the patients
-    patients = []
-    for patient_file in tcga_patient_files:
-        with open(patient_file, 'rb') as handle:
-            patient = pickle.load(handle)
-        assert isinstance(patient, tcga_parser.TcgaPatient)
-        patients.append(patient)
-
+    pool = multiprocessing.Pool(threads)  # Create worker pool
+    patients = pool.map(_patient_loader, tcga_patient_files)
     return patients
 
 def main():
