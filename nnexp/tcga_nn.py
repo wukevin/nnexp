@@ -244,15 +244,33 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
         strides=[1, 1, second_pool_window, 1],
         padding='SAME'
     )
-    print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
+    print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 200, second_num_features)
+
+    # Third convolutional layer
+    third_num_features = 32
+    third_patch_height, third_patch_width = 2, 8
+    W_conv3 = weight_variable([third_patch_height, third_patch_width, second_num_features, third_num_features])
+    b_conv3 = bias_variable([third_num_features])
+    h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
+    third_pool_window_width, third_pool_window_height = 8, 2
+    h_pool3 = tf.nn.max_pool(
+        h_conv3,
+        ksize=[1, third_pool_window_height, third_pool_window_width, 1],
+        strides=[1, third_pool_window_height, third_pool_window_width, 1],
+        padding="SAME"
+    )
+    print("Third pooled layer:", h_pool3.get_shape())
 
     # Densely connected layer
-    dense_num_features = 5000 # previously 4096
-    flattened = int(10 * 1600 / second_pool_window * second_num_features)
+    dense_num_features = 10000 # previously 4096
+    # flattened = int(10 * 1600 / second_pool_window * second_num_features)
+    flattened = 4000  # 5 * 25 * 32
     W_fc1 = weight_variable([flattened, dense_num_features])
     b_fc1 = bias_variable([dense_num_features])
-    h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    # h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
+    # h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    h_pool3_flat = tf.reshape(h_pool3, [-1, flattened])
+    h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
 
     # Dropout
     keep_prob = tf.placeholder(tf.float32)
@@ -266,7 +284,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
     # A learning rate of 1e-4 seems to cause us to never really converge on a good solution
     # the default value (1e-3?) (with 1100 trainign iterations) seems to work well
-    train_step = tf.train.AdamOptimizer(5e-4).minimize(cross_entropy)
+    train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     num_correct = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))  # Number of things correct
