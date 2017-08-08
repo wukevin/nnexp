@@ -241,7 +241,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     h_pool2 = tf.nn.max_pool(
         h_conv2,
         ksize=[1, 1, second_pool_window, 1],
-        strides = [1, 1, second_pool_window, 1],
+        strides=[1, 1, second_pool_window, 1],
         padding='SAME'
     )
     print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
@@ -292,7 +292,9 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     num_right = 0
     for test_data_single, test_truth_single, test_patient in zip(test_data, test_truth, expression_data.testing_patients):
         acc = accuracy.eval(feed_dict={x: [test_data_single], y_: [test_truth_single], keep_prob: 1.0})
-        print(test_patient.barcode, test_patient.clinical['her2_status_by_ihc'], acc)
+        line = "\t".join([test_patient.barcode, test_patient.clinical['her2_status_by_ihc'], str(int(acc))])
+        print(line)
+        logfile.write(line + "\n")
         num_right += 1 if int(acc) == 1 else 0
     # final_accuracy = accuracy.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
     # final_num_right = num_correct.eval(feed_dict={x: test_data, y_: test_truth, keep_prob: 1.0})
@@ -348,7 +350,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
     parser.add_argument("-s", "--size", type=int, default=50, help="Size of the blocks for truth sets")
-    parser.add_argument("-i", "--iter", type=int, default=5000, help="Number of training iterations to run")
+    parser.add_argument("-i", "--iter", type=int, default=2500, help="Number of training iterations to run")  # Default used to be 5000
     parser.add_argument("-n", "--itersize", type=int, default=25, help="Number of samples to run per training iteration")
     return parser
 
