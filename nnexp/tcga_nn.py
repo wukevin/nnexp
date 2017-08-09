@@ -247,12 +247,15 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
 
     # Densely connected layer
-    dense_num_features = 5000 # previously 4096
-    flattened = int(10 * 1600 / second_pool_window * second_num_features)
+    final_shape = [x for x in h_pool2.get_shape().as_list() if x is not None]
+    flattened = int(np.product(final_shape))
+    print("Final flattened:", flattened)
+    dense_num_features = 4096 # previously 4096
+    # flattened = int(10 * 1600 / second_pool_window * second_num_features)
     W_fc1 = weight_variable([flattened, dense_num_features])
     b_fc1 = bias_variable([dense_num_features])
     h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    h_fc1 = tf.nn.elu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
 
     # Dropout
     keep_prob = tf.placeholder(tf.float32)
@@ -266,7 +269,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y_, logits=y_conv))
     # A learning rate of 1e-4 seems to cause us to never really converge on a good solution
     # the default value (1e-3?) (with 1100 trainign iterations) seems to work well
-    train_step = tf.train.AdamOptimizer(5e-4).minimize(cross_entropy)
+    train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
     num_correct = tf.reduce_sum(tf.cast(correct_prediction, tf.float32))  # Number of things correct
@@ -350,7 +353,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
     parser.add_argument("-s", "--size", type=int, default=50, help="Size of the blocks for truth sets")
-    parser.add_argument("-i", "--iter", type=int, default=2500, help="Number of training iterations to run")  # Default used to be 5000
+    parser.add_argument("-i", "--iter", type=int, default=2000, help="Number of training iterations to run")  # Default used to be 5000
     parser.add_argument("-n", "--itersize", type=int, default=25, help="Number of samples to run per training iteration")
     return parser
 
