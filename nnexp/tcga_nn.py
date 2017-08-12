@@ -231,8 +231,8 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     print("Pooled first layer:", h_pool1.get_shape())  # (?, 10, 1600, first_num_features)
 
     # Second convolutional layer
-    second_num_features = 24
-    second_patch_height, second_patch_width = 1, 32
+    second_num_features = 16
+    second_patch_height, second_patch_width = 2, 32
     W_conv2 = weight_variable([second_patch_height, second_patch_width, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
     b_conv2 = bias_variable([second_num_features])
     h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
@@ -240,8 +240,8 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     # Reduce from 10x1600xfirst_num_features to be 1600 / second_pool_window long
     h_pool2 = tf.nn.max_pool(
         h_conv2,
-        ksize=[1, 1, second_pool_window, 1],
-        strides=[1, 1, second_pool_window, 1],
+        ksize=[1, 2, second_pool_window, 1],
+        strides=[1, 2, second_pool_window, 1],
         padding='SAME'
     )
     print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
@@ -250,7 +250,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     final_shape = [x for x in h_pool2.get_shape().as_list() if x is not None]
     flattened = int(np.product(final_shape))
     print("Final flattened:", flattened)
-    dense_num_features = 4096 # previously 4096
+    dense_num_features = int(4096 / 2) # previously 4096
     # flattened = int(10 * 1600 / second_pool_window * second_num_features)
     W_fc1 = weight_variable([flattened, dense_num_features])
     b_fc1 = bias_variable([dense_num_features])
@@ -282,6 +282,11 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
         # print("{0} of {1} cross validation steps".format(k, k_validations))
     expression_data = ExpressionDataThreeDimensional(patients, save_for_testing=ksize, start_of_testing=ksize*kth)
     sess.run(tf.global_variables_initializer())
+    # Print a statement that shows the distribution of training set
+    print("{0} / {1} total training patients are positive".format(
+        len([p for p in expression_data.training_patients if p.clinical["her2_status_by_ihc"] == "Positive"]),
+        len(expression_data.training_patients)
+    ))
     for _i in range(training_iters):
         batch_xs, batch_ys = expression_data.next_training_batch(training_size)
         if _i % 100 == 0:
@@ -353,7 +358,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
     parser.add_argument("-s", "--size", type=int, default=50, help="Size of the blocks for truth sets")
-    parser.add_argument("-i", "--iter", type=int, default=2000, help="Number of training iterations to run")  # Default used to be 5000
+    parser.add_argument("-i", "--iter", type=int, default=2500, help="Number of training iterations to run")  # Default used to be 5000
     parser.add_argument("-n", "--itersize", type=int, default=25, help="Number of samples to run per training iteration")
     return parser
 
