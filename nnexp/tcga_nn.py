@@ -18,6 +18,7 @@ import argparse
 import tcga_imaging
 import tcga_parser
 import tcga_processor
+import tcga_analysis
 
 KEYS_OF_INTEREST = [
     "er_status_by_ihc",
@@ -136,19 +137,66 @@ class ExpressionDataThreeDimensional(object):
 
         self.index = 0
 
-    def next_training_batch(self, n=50):
+        # Read in the ranges that describes the maximum/minimum values for each datatype
+        self.ranges = {}
+        with open(tcga_analysis.RANGES_FILE, 'r') as handle:
+            for line in handle:
+                line = line.rstrip()
+                datatype, minimum, _delim, maximum = line.split()
+                self.ranges[datatype] = (np.float32(minimum), np.float32(maximum))
+
+    def next_training_batch(self, n=50, distort=True, sd_prop=0.003):
         """
         Returns the next batch of data, reshaped into a stright 1-dimensional vector. We will re-format this into
         a 3 dimensional vector again later
+
+        If distortion is enabled, then we by default take the range of that datatype
+        and set the SD of the added noise to be <sd_prop> of that range. For example, a
+        value of 0.03 ensures that 3 SD's (100% of the time) is at most 10% away from
+        true value
         """
         # next_index = min(self.index + n, len(self.training_patients))
         # subsetted_patients = [x for x in self.training_patients[self.index:next_index]]
         subsetted_patients = random.sample(self.training_patients, n)
         assert subsetted_patients
-        # for patient in subsetted_patients:  # Make sure that reshaping works properly
-        #     test = self.training_expression_vectors[patient.barcode].flatten()
-        #     assert np.array_equal(np.reshape(test, (11, 1600, 2)), self.training_expression_vectors[patient.barcode])  # Make sure that reshape works correctly
-        subsetted_data = np.vstack([self.training_expression_vectors[x.barcode].flatten() for x in subsetted_patients])
+        expression_data = []
+        for patient in subsetted_patients:
+            # Each expression vector is 11 x 1600 x 2
+            data = self.training_expression_vectors[patient.barcode]
+            original_shape = data.shape
+            if distort:
+                # Distort the data a little bit. The 0th channel is CNV, and the 1st channel is RNA
+                noise_shape = (data.shape[0], data.shape[1])  # Shape of noise matrices on a PER-CHANNNEL BASIS
+                cnv_min, cnv_max = self.ranges['cnv']
+                cnv_range = cnv_max - cnv_min
+                cnv_noise = np.random.normal(
+                    loc=0.0,
+                    scale=cnv_range * sd_prop,
+                    size=noise_shape
+                )
+                data[:, :, 0] += cnv_noise
+                # Now do the rna
+                rna_min, rna_max = self.ranges['gene']
+                rna_range = rna_max - rna_min
+                rna_noise = np.random.normal(
+                    loc=0.0,
+                    scale=rna_range * sd_prop,
+                    size=noise_shape
+                )
+                data[:, :, 1] += rna_noise
+                # noise = np.dstack((cnv_noise, rna_noise))
+                # noise = np.ndarray((cnv_noise, rna_noise))
+                # data = data + noise
+                # Normalize the data to make sure min/max is still true
+                # data[:, :, 0][data[:, :, 0] > cnv_max] = cnv_max
+                # data[:, :, 0][data[:, :, 0] < cnv_min] = cnv_min
+                # data[:, :, 1][data[:, :, 1] > rna_max] = rna_max
+                # data[:, :, 1][data[:, :, 1] < rna_min] = rna_min
+            assert data.shape == original_shape
+
+            expression_data.append(data.flatten())
+        subsetted_data = np.vstack(expression_data)
+        # subsetted_data = np.vstack([self.training_expression_vectors[x.barcode].flatten() for x in subsetted_patients])
         # Build the one-hot truth tensor
         onehot = np.zeros((subsetted_data.shape[0], 2), dtype=np.float32)
         for index, x in enumerate(subsetted_patients):

@@ -26,6 +26,11 @@ COMMON_GENES_FILE = os.path.join(
     "common_genes.txt"
 )
 
+RANGES_FILE = os.path.join(
+    RESULTS_DIR,
+    "ranges.txt"
+)
+
 def most_different_genes():
     """
     Calculates the most idfferentially expressed intervals from cnv data
