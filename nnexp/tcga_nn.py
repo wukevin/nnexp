@@ -150,10 +150,11 @@ class ExpressionDataThreeDimensional(object):
         Returns the next batch of data, reshaped into a stright 1-dimensional vector. We will re-format this into
         a 3 dimensional vector again later
 
-        If distortion is enabled, then we by default take the range of that datatype
-        and set the SD of the added noise to be <sd_prop> of that range. For example, a
-        value of 0.03 ensures that 3 SD's (100% of the time) is at most 10% away from
-        true value
+        If distortion is enabled, then we use the given <sd_prop> to generate a normal
+        distribution around 1, which we then use to scale the data to add "noise" on a
+        per-entry basis. For example, if using a sd_prop of 0.01, we generated a random
+        number o.99, then the value at that specific cell would be scaled to 0.99x its
+        original value. This is randomly done for each cell
         """
         # next_index = min(self.index + n, len(self.training_patients))
         # subsetted_patients = [x for x in self.training_patients[self.index:next_index]]
@@ -166,27 +167,12 @@ class ExpressionDataThreeDimensional(object):
             original_shape = data.shape
             if distort:
                 # Distort the data a little bit. The 0th channel is CNV, and the 1st channel is RNA
-                noise_shape = (data.shape[0], data.shape[1])  # Shape of noise matrices on a PER-CHANNNEL BASIS
-                cnv_min, cnv_max = self.ranges['cnv']
-                cnv_range = cnv_max - cnv_min
-                cnv_noise = np.random.normal(
-                    loc=0.0,
-                    scale=cnv_range * sd_prop,
-                    size=noise_shape
+                noise = np.random.normal(
+                    loc=1.0,
+                    scale=sd_prop,
+                    size=data.shape
                 )
-                data[:, :, 0] += cnv_noise
-                # Now do the rna
-                rna_min, rna_max = self.ranges['gene']
-                rna_range = rna_max - rna_min
-                rna_noise = np.random.normal(
-                    loc=0.0,
-                    scale=rna_range * sd_prop,
-                    size=noise_shape
-                )
-                data[:, :, 1] += rna_noise
-                # noise = np.dstack((cnv_noise, rna_noise))
-                # noise = np.ndarray((cnv_noise, rna_noise))
-                # data = data + noise
+                data = data * noise
                 # Normalize the data to make sure min/max is still true
                 # data[:, :, 0][data[:, :, 0] > cnv_max] = cnv_max
                 # data[:, :, 0][data[:, :, 0] < cnv_min] = cnv_min
