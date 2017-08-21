@@ -278,18 +278,35 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
         strides=[1, 1, second_pool_window, 1],
         padding='SAME'
     )
-    print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 400, second_num_features)
+    print("Pooled second layer:", h_pool2.get_shape()) # (?, 10, 200, second_num_features)
+
+    # Third convolutional layer
+    third_num_features = 32
+    third_patch_height, third_patch_width = 2, 8
+    W_conv3 = weight_variable([third_patch_height, third_patch_width, second_num_features, third_num_features])
+    b_conv3 = bias_variable([third_num_features])
+    h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
+    third_pool_window_width, third_pool_window_height = 8, 2
+    h_pool3 = tf.nn.max_pool(
+        h_conv3,
+        ksize=[1, third_pool_window_height, third_pool_window_width, 1],
+        strides=[1, third_pool_window_height, third_pool_window_width, 1],
+        padding="SAME"
+    )
+    final_shape = [x for x in h_pool3.get_shape().as_list() if x is not None]
+    print("Third pooled layer:", h_pool3.get_shape())
+    print("Num elem in array:", np.product(final_shape))
 
     # Densely connected layer
-    final_shape = [x for x in h_pool2.get_shape().as_list() if x is not None]
-    flattened = int(np.product(final_shape))
-    print("Final flattened:", flattened)
-    dense_num_features = 4096 # previously 4096
+    dense_num_features = 10000 # previously 4096
     # flattened = int(10 * 1600 / second_pool_window * second_num_features)
+    flattened = np.product(final_shape)  # 5 * 25 * 32
     W_fc1 = weight_variable([flattened, dense_num_features])
     b_fc1 = bias_variable([dense_num_features])
-    h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
-    h_fc1 = tf.nn.elu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    # h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
+    # h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+    h_pool3_flat = tf.reshape(h_pool3, [-1, flattened])
+    h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
 
     # Dropout
     keep_prob = tf.placeholder(tf.float32)
@@ -387,7 +404,7 @@ def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("-k", "--kth", type=int, required=True, help="The kth block to use as a truth set. 0-indexed")
     parser.add_argument("-s", "--size", type=int, default=50, help="Size of the blocks for truth sets")
-    parser.add_argument("-i", "--iter", type=int, default=2000, help="Number of training iterations to run")  # Default used to be 5000
+    parser.add_argument("-i", "--iter", type=int, default=3000, help="Number of training iterations to run")  # Default used to be 5000
     parser.add_argument("-n", "--itersize", type=int, default=25, help="Number of samples to run per training iteration")
     return parser
 
