@@ -258,7 +258,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     first_num_features = 6
     W_conv1 = weight_variable([1, 1, 2, first_num_features]) # first two are patch size, then input channels, then number of output features
     b_conv1 = bias_variable([first_num_features])  # There is a bias for every output channel
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)  # The output of this is a 11x1600xnum_features (n channels from the original 2)
+    h_conv1 = tf.nn.elu(conv2d(x_image, W_conv1) + b_conv1)  # The output of this is a 11x1600xnum_features (n channels from the original 2)
     # ksize is [batch, height, width, channels]
     # This pooling is mostly to just even out the dimensions to be a pretty 10 x 1600 x num_features
     h_pool1 = tf.nn.max_pool(h_conv1, ksize=[1, 2, 1, 1], strides=[1, 1, 1, 1], padding='VALID')  # Reduces to 10 x 1600 x 8
@@ -269,7 +269,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     second_patch_height, second_patch_width = 1, 32
     W_conv2 = weight_variable([second_patch_height, second_patch_width, first_num_features, second_num_features])  # outputs 32 features for each 10x10 patch
     b_conv2 = bias_variable([second_num_features])
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+    h_conv2 = tf.nn.elu(conv2d(h_pool1, W_conv2) + b_conv2)
     second_pool_window = 8 # Originally 5
     # Reduce from 10x1600xfirst_num_features to be 1600 / second_pool_window long
     h_pool2 = tf.nn.max_pool(
@@ -285,7 +285,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     third_patch_height, third_patch_width = 2, 8
     W_conv3 = weight_variable([third_patch_height, third_patch_width, second_num_features, third_num_features])
     b_conv3 = bias_variable([third_num_features])
-    h_conv3 = tf.nn.relu(conv2d(h_pool2, W_conv3) + b_conv3)
+    h_conv3 = tf.nn.elu(conv2d(h_pool2, W_conv3) + b_conv3)
     third_pool_window_width, third_pool_window_height = 8, 2
     h_pool3 = tf.nn.max_pool(
         h_conv3,
@@ -298,7 +298,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     print("Num elem in array:", np.product(final_shape))
 
     # Densely connected layer
-    dense_num_features = 10000 # previously 4096
+    dense_num_features = 4096 # previously 4096
     # flattened = int(10 * 1600 / second_pool_window * second_num_features)
     flattened = np.product(final_shape)  # 5 * 25 * 32
     W_fc1 = weight_variable([flattened, dense_num_features])
@@ -306,7 +306,7 @@ def multilayer_cnn(patients, kth=2, ksize=40, training_iters=5000, training_size
     # h_pool2_flat = tf.reshape(h_pool2, [-1, flattened])
     # h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
     h_pool3_flat = tf.reshape(h_pool3, [-1, flattened])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
+    h_fc1 = tf.nn.elu(tf.matmul(h_pool3_flat, W_fc1) + b_fc1)
 
     # Dropout
     keep_prob = tf.placeholder(tf.float32)
